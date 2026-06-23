@@ -7,8 +7,9 @@ import { MailModule } from './mail/mail.module';
 import { SubjectsModule } from './subjects/subjects.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { GamificationModule } from './gamification/gamification.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ProfileModule, MailModule, SubjectsModule, DashboardModule, GamificationModule, ResumeModule],
+  imports: [PrismaModule, AuthModule, ProfileModule, MailModule, SubjectsModule, DashboardModule, GamificationModule, ResumeModule, AiModule],
 })
 export class AppModule {}
