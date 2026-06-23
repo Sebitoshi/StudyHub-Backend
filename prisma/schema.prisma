@@ -1,0 +1,375 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProfessionalLevel {
+  STUDENT
+  INTERN
+  JUNIOR
+  MID
+  SENIOR
+}
+
+enum Modality {
+  ON_SITE
+  REMOTE
+  HYBRID
+}
+
+enum Availability {
+  FULL_TIME
+  PART_TIME
+  FREELANCE
+  NOT_AVAILABLE
+}
+
+enum SkillLevel {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+}
+
+enum AccessActionType {
+  LOGIN
+  LOGOUT
+  REGISTER
+  PASSWORD_CHANGE
+  EMAIL_CHANGE
+  PROFILE_UPDATE
+  TWO_FA_ENABLE
+  TWO_FA_DISABLE
+}
+
+model User {
+  id              Int              @id @default(autoincrement())
+  nombre          String
+  apellido        String
+  email           String           @unique
+  password        String?
+  googleId        String?          @unique
+  username        String?          @unique
+  role            UserRole         @default(USER)
+  isActive        Boolean          @default(true)
+  isBanned        Boolean          @default(false)
+  foto            String?
+  banner          String?
+  avatarPublicId  String?
+  bannerPublicId  String?
+  ciudad          String?
+  pais            String?
+  fechaNacimiento DateTime?
+  biografia       String?
+  github          String?
+  linkedin        String?
+  portafolio      String?
+  paginaPersonal  String?
+  twoFactorEnabled    Boolean          @default(false)
+  twoFactorSecret     String?
+  emailVerified       Boolean          @default(false)
+  verificationTokens  VerificationToken[]
+  notificationSettings NotificationSettings?
+  privacySettings     PrivacySettings?
+  profile         AcademicProfile?
+  professionalProfile ProfessionalProfile?
+  skills          UserSkill[]
+  objectives      UserObjective[]
+  modules         UserModule[]
+  sessions        UserSession[]
+  accessLogs      UserAccessLog[]
+  subjects        Subject[]
+  progress        UserProgress?
+  streak          StudyStreak?
+  achievements    UserAchievement[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@map("users")
+}
+
+model NotificationSettings {
+  id               Int     @id @default(autoincrement())
+  userId           Int     @unique
+  emailEnabled     Boolean @default(true)
+  pushEnabled      Boolean @default(true)
+  remindersEnabled Boolean @default(true)
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_settings")
+}
+
+model PrivacySettings {
+  id           Int     @id @default(autoincrement())
+  userId       Int     @unique
+  publicProfile Boolean @default(false)
+  showSkills   Boolean @default(true)
+  showCV       Boolean @default(false)
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("privacy_settings")
+}
+
+model UserSession {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  refreshToken String?
+  deviceInfo   String?
+  ipAddress    String?
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+model VerificationToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  type      String
+  expiresAt DateTime
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@map("verification_tokens")
+}
+
+model UserAccessLog {
+  id         Int             @id @default(autoincrement())
+  userId     Int
+  actionType AccessActionType
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime        @default(now())
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_access_logs")
+}
+
+model AppModule {
+  id        Int           @id @default(autoincrement())
+  nombre    String        @unique
+  slug      String        @unique
+  icon      String?
+  activoDefecto Boolean   @default(false)
+  users     UserModule[]
+  createdAt DateTime      @default(now())
+
+  @@map("app_modules")
+}
+
+model UserModule {
+  userId   Int
+  moduleId Int
+  enabled  Boolean @default(true)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module   AppModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, moduleId])
+  @@map("user_modules")
+}
+
+model Objective {
+  id        Int              @id @default(autoincrement())
+  nombre    String           @unique
+  icon      String?
+  users     UserObjective[]
+  createdAt DateTime         @default(now())
+
+  @@map("objectives")
+}
+
+model UserObjective {
+  userId      Int
+  objectiveId Int
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  objective   Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+
+  @@id([userId, objectiveId])
+  @@map("user_objectives")
+}
+
+model Skill {
+  id        Int         @id @default(autoincrement())
+  nombre    String      @unique
+  users     UserSkill[]
+  createdAt DateTime    @default(now())
+
+  @@map("skills")
+}
+
+model UserSkill {
+  userId  Int
+  skillId Int
+  nivel   SkillLevel?
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill   Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([userId, skillId])
+  @@map("user_skills")
+}
+
+model AcademicProfile {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @unique
+  universidad     String
+  carrera         String
+  facultad        String
+  semestreActual  Int
+  fechaInicio     DateTime
+  fechaGraduacion DateTime
+  modalidad       Modality
+  promedio        Float?
+  materiasFav     String[]  @default([])
+  materiasDificil String[]  @default([])
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("academic_profiles")
+}
+
+model ProfessionalProfile {
+  id               Int               @id @default(autoincrement())
+  userId           Int               @unique
+  cargoDeseado     String
+  nivelActual      ProfessionalLevel
+  disponibilidad   Availability
+  modalidadDeseada Modality
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@map("professional_profiles")
+}
+
+model Subject {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  codigo      String?
+  profesor    String?
+  salon       String?
+  creditos    Int?
+  color       String
+  descripcion String?
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedules   Schedule[]
+  tasks       Task[]
+  notes       Note[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("subjects")
+}
+
+model Schedule {
+  id        Int      @id @default(autoincrement())
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  classroom String?
+  subjectId Int
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("schedules")
+}
+
+model Task {
+  id          Int        @id @default(autoincrement())
+  title       String
+  description String?
+  priority    TaskPriority
+  status      TaskStatus
+  dueDate     DateTime
+  completedAt DateTime?
+  subjectId   Int
+  subject     Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("tasks")
+}
+
+model Note {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  isPinned  Boolean  @default(false)
+  subjectId Int
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notes")
+}
+
+model UserProgress {
+  userId   Int     @id
+  level    Int     @default(1)
+  xp       Int     @default(0)
+  totalXp  Int     @default(0)
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_progress")
+}
+
+model Achievement {
+  id          Int      @id @default(autoincrement())
+  nombre      String   @unique
+  descripcion String
+  icon        String?
+  xpReward    Int      @default(0)
+  users       UserAchievement[]
+  createdAt   DateTime @default(now())
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  userId        Int
+  achievementId Int
+  unlockedAt    DateTime @default(now())
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@id([userId, achievementId])
+  @@map("user_achievements")
+}
+
+model StudyStreak {
+  userId         Int       @id
+  currentStreak  Int       @default(0)
+  bestStreak     Int       @default(0)
+  lastActivityAt DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("study_streaks")
+}
