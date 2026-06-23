@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateCertificateDto } from './dto/create-certificate.dto';
+import { CreateCertificateDto } from '../dto/create-certificate.dto';
 import { UpdateCertificateDto } from './dto/update-certificate.dto';
 
 @Injectable()

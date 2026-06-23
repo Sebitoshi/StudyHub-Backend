@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { LanguageService } from './language.service';
-import { CreateLanguageDto } from './dto/create-language.dto';
+import { CreateLanguageDto } from '../dto/create-language.dto';
 import { UpdateLanguageDto } from './dto/update-language.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';

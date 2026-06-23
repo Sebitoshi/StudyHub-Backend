@@ -1,7 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDateString, IsOptional, IsString, IsInt } from 'class-validator';
 
 export class CreateExperienceDto {
+  @ApiProperty()
+  @IsInt()
+  resumeId: number;
+
   @ApiProperty()
   @IsString()
   company: string;

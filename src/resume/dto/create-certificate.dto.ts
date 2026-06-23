@@ -1,7 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsDateString } from 'class-validator';
+import { IsOptional, IsString, IsDateString, IsInt } from 'class-validator';
 
 export class CreateCertificateDto {
+  @ApiProperty()
+  @IsInt()
+  resumeId: number;
+
   @ApiProperty()
   @IsString()
   title: string;

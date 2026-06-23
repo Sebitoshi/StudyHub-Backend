@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Put, Res, UseGuards, ForbiddenException } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { ResumeService } from './resume.service';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateLanguageDto } from './dto/create-language.dto';
+import { CreateLanguageDto } from '../dto/create-language.dto';
 import { UpdateLanguageDto } from './dto/update-language.dto';
 
 @Injectable()
