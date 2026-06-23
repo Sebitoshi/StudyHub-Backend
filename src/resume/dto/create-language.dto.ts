@@ -9,15 +9,15 @@ export enum LanguageLevelDto {
 }
 
 export class CreateLanguageDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'ID del CV al que pertenece el idioma', example: 1 })
   @IsInt()
   resumeId: number;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Nombre del idioma', example: 'Inglés' })
   @IsString()
   name: string;
 
-  @ApiProperty({ enum: LanguageLevelDto })
+  @ApiProperty({ description: 'Nivel de dominio del idioma', enum: LanguageLevelDto, example: LanguageLevelDto.INTERMEDIATE })
   @IsEnum(LanguageLevelDto)
   level: LanguageLevelDto;
 }

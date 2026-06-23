@@ -15,10 +15,12 @@ export class PromptBuilderService {
     userId: number,
     conversationContext: Array<{ role: string; content: string }>,
     userMessage: string,
-    memories: Array<{ type: string; key: string; value: string }> = [],
+    memories: any = [],
     teacherProfile?: { code?: string; name?: string; systemPrompt?: string; teachingStyle?: string },
     promptTemplate?: { code?: string; name?: string; prompt?: string },
-    knowledgeGaps?: Array<{ topic: string; subject?: string; confidence?: number; status?: string }>,
+    knowledgeGaps?: any,
+    studentModel?: any,
+    adaptive?: any,
   ) {
     const defaultSystem = `Eres Profesor IA: un tutor académico para estudiantes de secundaria y universidad. Sigue estos principios:
 - Enseñar antes que responder: prioriza la explicación y el razonamiento paso a paso cuando sea pertinente.
@@ -28,9 +30,9 @@ export class PromptBuilderService {
 - Preparación para exámenes: si detectas preparación, genera simulacros, preguntas tipo examen y prioriza conceptos fundamentales.
 - Generación de recursos: ofrece resúmenes, flashcards, quizzes y cronogramas cuando sean útiles.
 - Uso del contexto: integra materias, tareas, notas, historial y memorias del estudiante en tus respuestas.
-- Estilo: claro, estructurado, pedagógico y motivador; evita tecnicismos innecesarios.
+- Estilo: claro, estructurado, pedagógico y motivador; evita tecnicismos innecesarios.`
 
-    const systemPrompt = process.env.AI_SYSTEM_PROMPT || defaultSystem;
+  const systemPrompt = process.env.AI_SYSTEM_PROMPT || defaultSystem;
     const academicContext = await this.academic.buildAcademicContext(userId);
 
     // Summarize academic context into a compact string
@@ -105,7 +107,7 @@ export class PromptBuilderService {
 
     // Adaptive strategy from engine
     if (adaptive) {
-      const strat = [];
+      const strat: string[] = [];
       strat.push(`TeachingMode: ${adaptive.mode}`);
       if (adaptive.predictedWeaknesses && adaptive.predictedWeaknesses.length) strat.push(`PredictedWeaknesses: ${adaptive.predictedWeaknesses.map((w) => w.topic).join(', ')}`);
       if (adaptive.actions && adaptive.actions.socraticPrompts) strat.push(`SocraticPrompts: ${adaptive.actions.socraticPrompts.join(' | ')}`);
@@ -116,28 +118,57 @@ export class PromptBuilderService {
     // Student profile assembled from academic context + memories
     if (studentProfileString) messages.push({ role: 'system', content: `StudentProfile:\n${studentProfileString}` });
 
+    // Student model (persistent) - strengths, weaknesses, subject levels, comprehension speed
+    if (studentModel) {
+      const modelPieces: string[] = [];
+      if (studentModel.learningStyle) modelPieces.push(`LearningStyle: ${studentModel.learningStyle}`);
+      if (studentModel.comprehensionSpeed) modelPieces.push(`ComprehensionSpeed: ${studentModel.comprehensionSpeed}`);
+      if (studentModel.engagementScore !== undefined) modelPieces.push(`EngagementScore: ${studentModel.engagementScore}`);
+      if (studentModel.strengths && studentModel.strengths.length) modelPieces.push(`Strengths: ${studentModel.strengths.join(', ')}`);
+      if (studentModel.weaknesses && studentModel.weaknesses.length) modelPieces.push(`Weaknesses: ${studentModel.weaknesses.join(', ')}`);
+      if (studentModel.subjectLevels) modelPieces.push(`SubjectLevels: ${Object.entries(studentModel.subjectLevels).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+      if (studentModel.confidencePerSubject) modelPieces.push(`ConfidencePerSubject: ${Object.entries(studentModel.confidencePerSubject).map(([k, v]) => `${k}:${(v as number).toFixed(2)}`).join(', ')}`);
+      messages.push({ role: 'system', content: `StudentModel:\n${modelPieces.join('\n')}` });
+    }
+
     if (academicString) messages.push({ role: 'system', content: `AcademicContext:\n${academicString}` });
 
-    // Include relevant memories
+    // Include relevant memories (compressed)
     if (memories && memories.length) {
-      const memStrings = memories.slice(0, 10).map((m) => `${m.type}: ${m.value}`);
+      // pick top memories by occurrence of type
+      const typeCount: Record<string, number> = {};
+      for (const m of memories) typeCount[m.type] = (typeCount[m.type] || 0) + 1;
+      const sorted = (memories || []).sort((a, b) => (typeCount[b.type] - typeCount[a.type]));
+      const memStrings = sorted.slice(0, 6).map((m) => `${m.type}: ${m.value}`);
       messages.push({ role: 'system', content: `RelevantMemories:\n${memStrings.join('\n')}` });
     }
 
-    // Include detected knowledge gaps if any
+    // Include detected knowledge gaps if any (compressed)
     if (knowledgeGaps && knowledgeGaps.length) {
-      const gaps = knowledgeGaps.slice(0, 10).map((g) => `${g.topic}`);
+      const gaps = knowledgeGaps.slice(0, 5).map((g) => `${g.topic}`);
       messages.push({ role: 'system', content: `KnowledgeGaps:\n${gaps.join('\n')}` });
     }
 
     // Include recent conversation context (last N messages)
-    const convo = (conversationContext || []).slice(-12);
+    const convo = (conversationContext || []).slice(-8);
     for (const m of convo) messages.push(m);
 
     // Finally the user message
     messages.push({ role: 'user', content: userMessage });
 
     this.logger.log(`Built prompt for user ${userId}: messages=${messages.length}`);
+    // Simple context compression by total character budget
+    const maxChars = 14000; // approx 1500-2000 tokens depending on content
+    let joined = messages.map((m) => m.content).join('\n');
+    if (joined.length > maxChars) {
+      // aggressive compression: keep system prompts, top 3 memories, top 3 gaps, last 4 messages
+      const sys = messages.filter((m) => m.role === 'system').slice(0, 6);
+      const last = messages.filter((m) => m.role !== 'system').slice(-4);
+      const compressed = [...sys, ...last];
+      this.logger.log(`Compressed prompt for user ${userId}: originalChars=${joined.length}`);
+      return compressed;
+    }
+
     return messages;
   }
 }

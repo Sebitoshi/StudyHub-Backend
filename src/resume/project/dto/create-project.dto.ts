@@ -2,29 +2,44 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsArray, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateProjectDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'ID del CV al que pertenece el proyecto', example: 1 })
   @IsNumber()
   resumeId: number;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Título del proyecto', example: 'Study Hub' })
   @IsString()
   title: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'Descripción breve del proyecto',
+    example: 'Plataforma para organizar materias, tareas, notas y progreso académico.',
+  })
   @IsString()
   description: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    description: 'URL del repositorio en GitHub',
+    example: 'https://github.com/usuario/study-hub',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   githubUrl?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    description: 'URL pública del proyecto desplegado',
+    example: 'https://study-hub.example.com',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   liveUrl?: string;
 
-  @ApiProperty({ type: [String] })
+  @ApiProperty({
+    description: 'Tecnologías utilizadas en el proyecto',
+    example: ['NestJS', 'PostgreSQL', 'React'],
+    type: [String],
+  })
   @IsArray()
   technologies: string[];
 }

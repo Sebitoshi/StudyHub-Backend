@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config'; 
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ResumeModule } from './resume/resume.module';
@@ -10,6 +11,19 @@ import { GamificationModule } from './gamification/gamification.module';
 import { AiModule } from './ai/ai.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ProfileModule, MailModule, SubjectsModule, DashboardModule, GamificationModule, ResumeModule, AiModule],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+    PrismaModule, 
+    AuthModule, 
+    ProfileModule, 
+    MailModule, 
+    SubjectsModule, 
+    DashboardModule, 
+    GamificationModule, 
+    ResumeModule, 
+    AiModule
+  ],
 })
 export class AppModule {}

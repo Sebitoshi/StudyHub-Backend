@@ -17,7 +17,7 @@ export class GroqService {
     try {
       // Use official Groq SDK
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { Groq } = require('groq');
+      const { Groq } = require('groq-sdk');
       this.client = new Groq({ apiKey });
       this.logger.log('Groq client configured');
     } catch (err) {

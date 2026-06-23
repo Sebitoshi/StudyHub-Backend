@@ -6,6 +6,7 @@ import { LoginDto } from './dto/login-auth.dto';
 import { RegisterDto } from './dto/register-auth.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendCodeDto } from './dto/resend-code.dto';
+import type { Request } from 'express';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -44,7 +45,7 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Callback de Google OAuth' })
-  googleCallback(@Req() req: Express.Request) {
+  googleCallback(@Req() req: Request) {
     return req.user;
   }
 }

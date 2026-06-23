@@ -9,6 +9,11 @@ export const TEACHER_PROFILES_COLLECTION = 'TEACHER_PROFILES_COLLECTION';
 export const TEACHER_PROMPT_TEMPLATES_COLLECTION = 'TEACHER_PROMPT_TEMPLATES_COLLECTION';
 export const LEARNING_ANALYTICS_COLLECTION = 'LEARNING_ANALYTICS_COLLECTION';
 export const KNOWLEDGE_GAPS_COLLECTION = 'KNOWLEDGE_GAPS_COLLECTION';
+export const STUDENT_MODELS_COLLECTION = 'STUDENT_MODELS_COLLECTION';
+export const GENERATED_RESOURCES_COLLECTION = 'GENERATED_RESOURCES_COLLECTION';
+export const LEARNING_PATHS_COLLECTION = 'LEARNING_PATHS_COLLECTION';
+export const ADAPTIVE_SESSIONS_COLLECTION = 'ADAPTIVE_SESSIONS_COLLECTION';
+export const LEARNING_GOALS_COLLECTION = 'LEARNING_GOALS_COLLECTION';
 
 export const mongoProviders: Provider[] = [
   {
@@ -35,6 +40,51 @@ export const mongoProviders: Provider[] = [
       const dbName = process.env.MONGODB_DB || 'studyhub';
       const db = client.db(dbName);
       return db.collection('knowledge_gaps');
+    },
+    inject: [MONGO_CLIENT],
+  },
+  {
+    provide: STUDENT_MODELS_COLLECTION,
+    useFactory: (client: MongoClient) => {
+      const dbName = process.env.MONGODB_DB || 'studyhub';
+      const db = client.db(dbName);
+      return db.collection('student_models');
+    },
+    inject: [MONGO_CLIENT],
+  },
+  {
+    provide: GENERATED_RESOURCES_COLLECTION,
+    useFactory: (client: MongoClient) => {
+      const dbName = process.env.MONGODB_DB || 'studyhub';
+      const db = client.db(dbName);
+      return db.collection('generated_resources');
+    },
+    inject: [MONGO_CLIENT],
+  },
+  {
+    provide: LEARNING_PATHS_COLLECTION,
+    useFactory: (client: MongoClient) => {
+      const dbName = process.env.MONGODB_DB || 'studyhub';
+      const db = client.db(dbName);
+      return db.collection('learning_paths');
+    },
+    inject: [MONGO_CLIENT],
+  },
+  {
+    provide: LEARNING_GOALS_COLLECTION,
+    useFactory: (client: MongoClient) => {
+      const dbName = process.env.MONGODB_DB || 'studyhub';
+      const db = client.db(dbName);
+      return db.collection('learning_goals');
+    },
+    inject: [MONGO_CLIENT],
+  },
+  {
+    provide: ADAPTIVE_SESSIONS_COLLECTION,
+    useFactory: (client: MongoClient) => {
+      const dbName = process.env.MONGODB_DB || 'studyhub';
+      const db = client.db(dbName);
+      return db.collection('adaptive_sessions');
     },
     inject: [MONGO_CLIENT],
   },
