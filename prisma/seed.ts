@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, AchievementCategory } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -44,64 +44,55 @@ async function main() {
 
   const achievements = [
     {
-      nombre: 'FIRST_SUBJECT',
+      code: 'FIRST_SUBJECT', nombre: 'Primera materia',
       descripcion: 'Crear tu primera materia',
-      icon: 'book',
-      xpReward: 20,
+      category: AchievementCategory.SUBJECT, icon: 'book', badgeColor: '#4CAF50', xpReward: 20,
     },
     {
-      nombre: 'FIRST_TASK',
+      code: 'FIRST_TASK', nombre: 'Primera tarea',
       descripcion: 'Crear tu primera tarea',
-      icon: 'task',
-      xpReward: 20,
+      category: AchievementCategory.TASK, icon: 'task', badgeColor: '#2196F3', xpReward: 20,
     },
     {
-      nombre: 'FIRST_TASK_COMPLETED',
+      code: 'FIRST_TASK_COMPLETED', nombre: 'Primera tarea completada',
       descripcion: 'Completar tu primera tarea',
-      icon: 'check_circle',
-      xpReward: 30,
+      category: AchievementCategory.TASK, icon: 'check_circle', badgeColor: '#4CAF50', xpReward: 30,
     },
     {
-      nombre: 'TEN_TASKS_COMPLETED',
+      code: 'TEN_TASKS_COMPLETED', nombre: '10 tareas completadas',
       descripcion: 'Completar 10 tareas',
-      icon: 'star',
-      xpReward: 50,
+      category: AchievementCategory.TASK, icon: 'star', badgeColor: '#FF9800', xpReward: 50,
     },
     {
-      nombre: 'FIFTY_TASKS_COMPLETED',
+      code: 'FIFTY_TASKS_COMPLETED', nombre: '50 tareas completadas',
       descripcion: 'Completar 50 tareas',
-      icon: 'stars',
-      xpReward: 100,
+      category: AchievementCategory.TASK, icon: 'stars', badgeColor: '#F44336', xpReward: 100,
     },
     {
-      nombre: 'HUNDRED_NOTES',
+      code: 'HUNDRED_NOTES', nombre: '100 notas',
       descripcion: 'Crear 100 notas',
-      icon: 'note_stack',
-      xpReward: 100,
+      category: AchievementCategory.NOTE, icon: 'note_stack', badgeColor: '#9C27B0', xpReward: 100,
     },
     {
-      nombre: 'STREAK_7',
+      code: 'STREAK_7', nombre: 'Racha de 7 días',
       descripcion: 'Mantener una racha de 7 días',
-      icon: 'local_fire_department',
-      xpReward: 50,
+      category: AchievementCategory.STREAK, icon: 'local_fire_department', badgeColor: '#FF5722', xpReward: 50,
     },
     {
-      nombre: 'STREAK_30',
+      code: 'STREAK_30', nombre: 'Racha de 30 días',
       descripcion: 'Mantener una racha de 30 días',
-      icon: 'whatshot',
-      xpReward: 100,
+      category: AchievementCategory.STREAK, icon: 'whatshot', badgeColor: '#D32F2F', xpReward: 100,
     },
     {
-      nombre: 'LEVEL_5',
+      code: 'LEVEL_5', nombre: 'Nivel 5',
       descripcion: 'Alcanzar el nivel 5',
-      icon: 'military_tech',
-      xpReward: 80,
+      category: AchievementCategory.SUBJECT, icon: 'military_tech', badgeColor: '#FFD700', xpReward: 80,
     },
   ];
 
   for (const a of achievements) {
     await prisma.achievement.upsert({
-      where: { nombre: a.nombre },
+      where: { code: a.code },
       update: {},
       create: a,
     });

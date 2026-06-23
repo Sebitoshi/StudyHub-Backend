@@ -15,10 +15,15 @@ import { ToggleModuleDto } from './dto/toggle-module.dto';
 import { UpdatePersonalInfoDto } from './dto/update-personal-info.dto';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
 import { UpdatePrivacySettingsDto } from './dto/update-privacy-settings.dto';
+import { GamificationService } from '../gamification/gamification.service';
+import { XpActionType } from '../common/enums';
 
 @Injectable()
 export class ProfileService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private gamification: GamificationService,
+  ) {}
 
   // ─── Academic ───────────────────────────────────────────
 
@@ -351,7 +356,7 @@ export class ProfileService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id: userId },
       data: {
         ...dto,
@@ -360,6 +365,12 @@ export class ProfileService {
           : undefined,
       },
     });
+
+    if (dto.biografia || dto.github || dto.linkedin || dto.portafolio) {
+      await this.gamification.addXp(userId, 10, XpActionType.COMPLETE_PROFILE);
+    }
+
+    return updated;
   }
 
   // ─── Notifications ──────────────────────────────────

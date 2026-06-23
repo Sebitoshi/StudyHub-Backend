@@ -53,6 +53,26 @@ enum TaskStatus {
   OVERDUE
 }
 
+enum XpActionType {
+  CREATE_SUBJECT
+  CREATE_TASK
+  COMPLETE_TASK
+  CREATE_NOTE
+  COMPLETE_PROFILE
+  DAILY_STREAK
+  ACHIEVEMENT_UNLOCK
+}
+
+enum AchievementCategory {
+  TASK
+  NOTE
+  SUBJECT
+  STREAK
+  PROFILE
+  CV
+  JOB
+}
+
 enum AccessActionType {
   LOGIN
   LOGOUT
@@ -104,6 +124,7 @@ model User {
   progress        UserProgress?
   streak          StudyStreak?
   achievements    UserAchievement[]
+  xpHistory       XpHistory[]
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -142,6 +163,7 @@ model UserSession {
   createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("user_sessions")
 }
 
@@ -154,6 +176,7 @@ model VerificationToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
+  @@index([userId])
   @@map("verification_tokens")
 }
 
@@ -166,6 +189,7 @@ model UserAccessLog {
   createdAt  DateTime        @default(now())
   user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("user_access_logs")
 }
 
@@ -283,6 +307,7 @@ model Subject {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([userId])
   @@map("subjects")
 }
 
@@ -297,6 +322,7 @@ model Schedule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([subjectId])
   @@map("schedules")
 }
 
@@ -313,6 +339,7 @@ model Task {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
+  @@index([subjectId])
   @@map("tasks")
 }
 
@@ -326,15 +353,17 @@ model Note {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([subjectId])
   @@map("notes")
 }
 
 model UserProgress {
-  userId   Int     @id
-  level    Int     @default(1)
-  xp       Int     @default(0)
-  totalXp  Int     @default(0)
-  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  level     Int      @default(1)
+  xp        Int      @default(0)
+  totalXp   Int      @default(0)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -342,13 +371,17 @@ model UserProgress {
 }
 
 model Achievement {
-  id          Int      @id @default(autoincrement())
-  nombre      String   @unique
+  id          Int                @id @default(autoincrement())
+  code        String             @unique
+  nombre      String             @unique
   descripcion String
+  category    AchievementCategory @default(TASK)
   icon        String?
-  xpReward    Int      @default(0)
+  badgeColor  String?
+  badgeImage  String?
+  xpReward    Int                @default(0)
   users       UserAchievement[]
-  createdAt   DateTime @default(now())
+  createdAt   DateTime           @default(now())
 
   @@map("achievements")
 }
@@ -365,11 +398,25 @@ model UserAchievement {
 }
 
 model StudyStreak {
-  userId         Int       @id
+  id             Int       @id @default(autoincrement())
+  userId         Int       @unique
   currentStreak  Int       @default(0)
   bestStreak     Int       @default(0)
   lastActivityAt DateTime?
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("study_streaks")
+}
+
+model XpHistory {
+  id        Int         @id @default(autoincrement())
+  userId    Int
+  amount    Int
+  action    XpActionType
+  metadata  Json?
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@index([userId])
+  @@map("xp_history")
 }

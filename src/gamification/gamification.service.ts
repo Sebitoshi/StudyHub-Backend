@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { XpActionType } from '../common/enums';
 
-const XP_VALUES = {
+const XP_VALUES: Record<string, number> = {
   CREATE_SUBJECT: 10,
   CREATE_TASK: 15,
   COMPLETE_TASK: 25,
   CREATE_NOTE: 10,
   DAILY_STREAK: 20,
+  ACHIEVEMENT_UNLOCK: 0,
 } as const;
 
 const LEVEL_THRESHOLDS = [0, 100, 250, 500, 800, 1200, 1700, 2300, 3000, 4000];
@@ -64,13 +66,21 @@ export class GamificationService {
         id: ua.achievement.id,
         nombre: ua.achievement.nombre,
         descripcion: ua.achievement.descripcion,
+        category: ua.achievement.category,
         icon: ua.achievement.icon,
+        badgeColor: ua.achievement.badgeColor,
+        badgeImage: ua.achievement.badgeImage,
         unlockedAt: ua.unlockedAt,
       })),
     };
   }
 
-  async addXp(userId: number, amount: number, action: string) {
+  async addXp(
+    userId: number,
+    amount: number,
+    action: XpActionType,
+    metadata?: Record<string, unknown>,
+  ) {
     const progress = await this.prisma.userProgress.upsert({
       where: { userId },
       create: { userId, xp: amount, totalXp: amount },
@@ -89,9 +99,48 @@ export class GamificationService {
       });
     }
 
+    await this.prisma.xpHistory.create({
+      data: { userId, amount, action, metadata: metadata as any },
+    });
+
     await this.updateStreak(userId);
 
     await this.checkAchievements(userId);
+
+    return this.getProgress(userId);
+  }
+
+  async addAchievementXp(
+    userId: number,
+    amount: number,
+    achievementNombre: string,
+  ) {
+    const progress = await this.prisma.userProgress.upsert({
+      where: { userId },
+      create: { userId, xp: amount, totalXp: amount },
+      update: {
+        xp: { increment: amount },
+        totalXp: { increment: amount },
+      },
+    });
+
+    const newLevel = calculateLevel(progress.totalXp + amount);
+
+    if (newLevel > progress.level) {
+      await this.prisma.userProgress.update({
+        where: { userId },
+        data: { level: newLevel },
+      });
+    }
+
+    await this.prisma.xpHistory.create({
+      data: {
+        userId,
+        amount,
+        action: XpActionType.ACHIEVEMENT_UNLOCK,
+        metadata: { achievement: achievementNombre } as any,
+      },
+    });
 
     return this.getProgress(userId);
   }
@@ -192,18 +241,16 @@ export class GamificationService {
 
     for (const achievement of allAchievements) {
       if (unlockedIds.has(achievement.id)) continue;
-      if (conditions[achievement.nombre]) {
+      if (conditions[achievement.code]) {
         await this.prisma.userAchievement.create({
           data: { userId, achievementId: achievement.id },
         });
         if (achievement.xpReward > 0) {
-          await this.prisma.userProgress.update({
-            where: { userId },
-            data: {
-              xp: { increment: achievement.xpReward },
-              totalXp: { increment: achievement.xpReward },
-            },
-          });
+          await this.addAchievementXp(
+            userId,
+            achievement.xpReward,
+            achievement.code,
+          );
         }
       }
     }

@@ -13,7 +13,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { CreateNoteDto } from './dto/create-note.dto';
 import { UpdateNoteDto } from './dto/update-note.dto';
-import { TaskStatus } from '../common/enums';
+import { TaskStatus, XpActionType } from '../common/enums';
 
 @Injectable()
 export class SubjectsService {
@@ -38,7 +38,7 @@ export class SubjectsService {
     const subject = await this.prisma.subject.create({
       data: { ...dto, userId },
     });
-    await this.gamification.addXp(userId, 10, 'CREATE_SUBJECT');
+    await this.gamification.addXp(userId, 10, XpActionType.CREATE_SUBJECT);
     return subject;
   }
 
@@ -132,7 +132,7 @@ export class SubjectsService {
         subjectId,
       },
     });
-    await this.gamification.addXp(userId, 15, 'CREATE_TASK');
+    await this.gamification.addXp(userId, 15, XpActionType.CREATE_TASK);
     return task;
   }
 
@@ -182,7 +182,7 @@ export class SubjectsService {
     });
 
     if (!isCompleted) {
-      await this.gamification.addXp(userId, 25, 'COMPLETE_TASK');
+      await this.gamification.addXp(userId, 25, XpActionType.COMPLETE_TASK);
     }
 
     return updated;
@@ -205,7 +205,7 @@ export class SubjectsService {
     const note = await this.prisma.note.create({
       data: { ...dto, subjectId },
     });
-    await this.gamification.addXp(userId, 10, 'CREATE_NOTE');
+    await this.gamification.addXp(userId, 10, XpActionType.CREATE_NOTE);
     return note;
   }
 
