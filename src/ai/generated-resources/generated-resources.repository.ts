@@ -17,6 +17,32 @@ export class GeneratedResourcesRepository {
     return this.col.find({ userId }).sort({ createdAt: -1 }).toArray();
   }
 
+  async findById(id: string) {
+    return this.col.findOne({ _id: new ObjectId(id) });
+  }
+
+  async deleteById(id: string) {
+    return this.col.deleteOne({ _id: new ObjectId(id) });
+  }
+
+  async markCompleted(id: string, result: { resultScore?: number; resultCorrect?: number; resultTotal?: number } = {}) {
+    const now = new Date();
+    await this.col.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          completed: true,
+          completedAt: now,
+          resultScore: result.resultScore ?? null,
+          resultCorrect: result.resultCorrect ?? null,
+          resultTotal: result.resultTotal ?? null,
+          updatedAt: now,
+        },
+      },
+    );
+    return this.findById(id);
+  }
+
   async countCompletedByUser(userId: number) {
     return this.col.countDocuments({ userId, completed: true });
   }

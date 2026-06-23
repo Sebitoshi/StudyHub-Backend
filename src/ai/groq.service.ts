@@ -47,6 +47,31 @@ export class GroqService {
   }
 
   /**
+   * Request structured JSON from the model. Parses response and returns the parsed object.
+   */
+  async chatJson(messages: Array<{ role: string; content: string }>): Promise<{ data: any; tokensUsed?: number; model?: string }> {
+    const response = await this.chat(messages);
+    const data = this.parseJsonContent(response.content);
+    return { data, tokensUsed: response.tokensUsed, model: response.model };
+  }
+
+  private parseJsonContent(raw: string): any {
+    const text = (raw || '').trim();
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const candidate = (fenced?.[1] || text).trim();
+    try {
+      return JSON.parse(candidate);
+    } catch (err) {
+      const start = candidate.indexOf('{');
+      const end = candidate.lastIndexOf('}');
+      if (start >= 0 && end > start) {
+        return JSON.parse(candidate.slice(start, end + 1));
+      }
+      throw new Error('Failed to parse JSON from Groq response: ' + err);
+    }
+  }
+
+  /**
    * Try to stream completions if the SDK exposes a streaming interface.
    * onChunk will be called with partial strings as they arrive.
    * Returns true if streaming was used, false otherwise.

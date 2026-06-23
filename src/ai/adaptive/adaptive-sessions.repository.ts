@@ -11,4 +11,8 @@ export class AdaptiveSessionsRepository {
     const res = await this.col.insertOne({ ...doc, createdAt: now, updatedAt: now });
     return res.insertedId;
   }
+
+  async findByUser(userId: number, limit = 100) {
+    return this.col.find({ userId }).sort({ createdAt: -1 }).limit(limit).toArray();
+  }
 }

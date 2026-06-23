@@ -12,9 +12,8 @@ import { KnowledgeGapsService } from './knowledge-gaps/knowledge-gaps.service';
 import { AdaptiveLearningService } from './adaptive/adaptive-learning.service';
 import { StudentModelService } from './student-models/student-model.service';
 import { GeneratedResourcesService } from './generated-resources/generated-resources.service';
-import { LearningPathsService } from './learning-paths/learning-paths.service';
 import { AdaptiveSessionsService } from './adaptive/adaptive-sessions.service';
-import { ExamCoachService } from './adaptive/exam-coach.service';
+import { LearningGoalsService } from './learning-goals/learning-goals.service';
 
 @Injectable()
 export class AiService {
@@ -34,9 +33,8 @@ export class AiService {
     private readonly adaptiveLearningService: AdaptiveLearningService,
     private readonly studentModelService: StudentModelService,
     private readonly generatedResourcesService: GeneratedResourcesService,
-    private readonly learningPathsService: LearningPathsService,
     private readonly adaptiveSessionsService: AdaptiveSessionsService,
-    private readonly examCoachService: ExamCoachService,
+    private readonly learningGoalsService: LearningGoalsService,
   ) {}
 
   async ensureConversation(userId: number, conversationId?: string | number) {
@@ -70,119 +68,17 @@ export class AiService {
     const conv = await this.ensureConversation(userId, conversationId);
     if (!conv) throw new Error('Failed to create or fetch conversation');
 
-    const userMsg = {
-      conversationId: conv._id,
-      userId,
-      role: 'user',
-      content: message,
-      tokensUsed: null,
-      model: null,
-      attachments: [],
-      createdAt: new Date(),
-    };
+    const sessionStartedAt = new Date();
+    await this.persistUserMessage(conv._id, userId, message);
 
-    await this.messages.insertOne(userMsg);
-    await this.conversations.updateOne({ _id: conv._id }, { $inc: { messageCount: 1 }, $set: { lastMessageAt: new Date() } });
-
-    // Build academic context early (used for profile detection and analytics)
-    const academicContext = await this.academicService.buildAcademicContext(userId);
-
-    // Detect teacher profile
-    const teacherProfile = await this.teacherProfileService.detectProfile(message, academicContext);
-
-    // Detect intent / prompt template
-    const promptTemplate = this.promptTemplateService.detectIntent(message);
-
-    // Register question in learning analytics (try detect subject)
-    let detectedSubject: string | null = null;
-    try {
-      if (academicContext?.subjects && academicContext.subjects.length) {
-        const txt = (message || '').toLowerCase();
-        for (const s of academicContext.subjects) {
-          if (s.name && txt.includes((s.name || '').toLowerCase())) {
-            detectedSubject = s.name;
-            break;
-          }
-        }
-      }
-    } catch (err) {
-      // ignore
-    }
-    await this.learningAnalyticsService.recordQuestion(userId, detectedSubject);
-
-    // Build simple messages for Groq
-    const historyCursor = this.messages.find({ conversationId: conv._id }).sort({ createdAt: 1 }).limit(50);
-    const history = await historyCursor.toArray();
-    const conversationContext = history.map((m) => ({ role: m.role, content: m.content }));
-
-    // Retrieve relevant memories
-    const memories: any = await this.memoryService.getRelevantMemories(userId, message, 10);
-
-    // Detect and upsert knowledge gaps (heuristic) then fetch top gaps
-    try {
-      await this.knowledgeGapsService.detectAndUpsertGaps(userId, academicContext);
-    } catch (err) {
-      this.logger.warn('Knowledge gap detection failed: ' + err);
-    }
-    const knowledgeGaps = await this.knowledgeGapsService.getTopGaps(userId, 5);
-
-    // Adaptive learning analysis: decide teaching mode, suggested actions and resources
-    const adaptive = this.adaptiveLearningService.analyze(message, academicContext, memories, [], knowledgeGaps);
-
-    // load current student model to adapt prompt
-    const currentStudentModel = await this.studentModelService.get(userId);
-
-    // If exam/coach mode detected, generate practice exam and quick plan and persist them
-    try {
-      const isExam = adaptive?.mode === 'COACH' || (promptTemplate && promptTemplate.code === 'EXAM_PREPARATION') || /examen|parcial|final|evaluaci[oó]n|simulacro/.test(message.toLowerCase());
-      if (isExam) {
-        const exam = this.examCoachService.generateMockExam(message, 6);
-        const examResId = await this.generatedResourcesService.saveResource(userId, conv._id, 'practice_exam', `Simulacro: ${message}`, { exam });
-        const planId = await this.learningPathsService.createPath(userId, academicContext?.subjects?.[0]?.name || 'general', `Preparación para ${message}`, [{ day: 1, tasks: ['Repasar conceptos clave', 'Resolver 5 ejercicios'] }]);
-        adaptive.actions = adaptive.actions || {};
-        adaptive.actions.generatedExamId = examResId;
-        adaptive.actions.generatedPlanId = planId;
-      }
-    } catch (err) {
-      this.logger.warn('Exam generation failed: ' + err);
-    }
-
-    const memForPrompt = (memories || []).map((m: any) => ({ type: String(m.type || ''), key: String(m.key || m.type || ''), value: String(m.value || '') }));
-    const gapsForPrompt = (knowledgeGaps || []).map((g: any) => ({ topic: String(g.topic || g.name || ''), subject: g.subject, confidence: g.confidence, status: g.status }));
-    const messagesForModel = await this.promptBuilder.buildPrompt(userId, conversationContext, message, memForPrompt, teacherProfile, promptTemplate, gapsForPrompt, currentStudentModel, adaptive);
+    const prep = await this.prepareInteraction(userId, conv._id, message, sessionStartedAt);
+    const messagesForModel = await this.buildModelPrompt(userId, prep, message);
 
     const response = await this.groq.chat(messagesForModel);
+    await this.persistAssistantMessage(conv._id, userId, response.content, response.tokensUsed, response.model);
+    await this.autoGenerateTitle(conv, message);
 
-    const assistantMsg = {
-      conversationId: conv._id,
-      userId,
-      role: 'assistant',
-      content: response.content,
-      tokensUsed: response.tokensUsed || 0,
-      model: response.model || process.env.GROQ_MODEL || null,
-      attachments: [],
-      createdAt: new Date(),
-    };
-
-    await this.messages.insertOne(assistantMsg);
-    await this.conversations.updateOne({ _id: conv._id }, { $inc: { messageCount: 1 }, $set: { lastMessageAt: new Date() } });
-
-    // Auto-generate title from first user message if title is empty
-    try {
-      if (!conv.title) {
-        const titlePrompt = [
-          { role: 'system', content: 'You are a concise title generator.' },
-          { role: 'user', content: `Generate a short, descriptive title (3-6 words) for this conversation: "${message}"` },
-        ];
-        const titleResp = await this.groq.chat(titlePrompt);
-        const title = (titleResp?.content || '').trim().slice(0, 120);
-        if (title) {
-          await this.conversations.updateOne({ _id: conv._id }, { $set: { title, updatedAt: new Date() } });
-        }
-      }
-    } catch (err) {
-      this.logger.warn('Failed to auto-generate title: ' + err);
-    }
+    await this.finalizeInteraction(userId, conv._id, message, prep, sessionStartedAt);
 
     return { conversationId: conv._id, reply: response.content };
   }
@@ -197,8 +93,35 @@ export class AiService {
     const conv = await this.ensureConversation(userId, conversationId);
     if (!conv) throw new Error('Failed to create or fetch conversation');
 
+    const sessionStartedAt = new Date();
+    await this.persistUserMessage(conv._id, userId, message);
+
+    const prep = await this.prepareInteraction(userId, conv._id, message, sessionStartedAt);
+    const messagesForModel = await this.buildModelPrompt(userId, prep, message);
+
+    let finalContent = '';
+    const usedStream = await this.groq.stream(messagesForModel, async (chunk: string) => {
+      finalContent += chunk;
+      await onChunk(chunk);
+    });
+
+    if (!usedStream) {
+      const response = await this.groq.chat(messagesForModel);
+      finalContent = response.content;
+      await onChunk(finalContent);
+    }
+
+    await this.persistAssistantMessage(conv._id, userId, finalContent, null, process.env.GROQ_MODEL || null);
+    await this.autoGenerateTitle(conv, message);
+
+    await this.finalizeInteraction(userId, conv._id, message, prep, sessionStartedAt);
+
+    return { conversationId: conv._id, reply: finalContent };
+  }
+
+  private async persistUserMessage(conversationId: any, userId: number, message: string) {
     const userMsg = {
-      conversationId: conv._id,
+      conversationId,
       userId,
       role: 'user',
       content: message,
@@ -209,83 +132,224 @@ export class AiService {
     };
 
     await this.messages.insertOne(userMsg);
-    await this.conversations.updateOne({ _id: conv._id }, { $inc: { messageCount: 1 }, $set: { lastMessageAt: new Date() } });
+    await this.conversations.updateOne({ _id: conversationId }, { $inc: { messageCount: 1 }, $set: { lastMessageAt: new Date() } });
+  }
 
-    // Build history
-    const historyCursor = this.messages.find({ conversationId: conv._id }).sort({ createdAt: 1 }).limit(50);
-    const history = await historyCursor.toArray();
-    const conversationContext = history.map((m) => ({ role: m.role, content: m.content }));
-
-    // Build academic context, detect profile and intent for streaming flow
-    const academicContext = await this.academicService.buildAcademicContext(userId);
-    const teacherProfile = await this.teacherProfileService.detectProfile(message, academicContext);
-    const promptTemplate = this.promptTemplateService.detectIntent(message);
-
-    // Register analytics
-    let detectedSubject: string | null = null;
-    try {
-      if (academicContext?.subjects && academicContext.subjects.length) {
-        const txt = (message || '').toLowerCase();
-        for (const s of academicContext.subjects) {
-          if (s.name && txt.includes((s.name || '').toLowerCase())) {
-            detectedSubject = s.name;
-            break;
-          }
-        }
-      }
-    } catch (err) {}
-    await this.learningAnalyticsService.recordQuestion(userId, detectedSubject);
-
-    // Retrieve relevant memories
-    const memories: any = await this.memoryService.getRelevantMemories(userId, message, 10);
-
-    // Detect and upsert knowledge gaps, then fetch top gaps
-    try {
-      await this.knowledgeGapsService.detectAndUpsertGaps(userId, academicContext);
-    } catch (err) {
-      this.logger.warn('Knowledge gap detection failed: ' + err);
-    }
-    const knowledgeGaps = await this.knowledgeGapsService.getTopGaps(userId, 5);
-
-    // Adaptive learning analysis: decide teaching mode, suggested actions and resources
-    const adaptive = this.adaptiveLearningService.analyze(message, academicContext, memories, [], knowledgeGaps);
-
-    const currentStudentModel = await this.studentModelService.get(userId);
-    const memForPrompt2 = (memories || []).map((m: any) => ({ type: String(m.type || ''), key: String(m.key || m.type || ''), value: String(m.value || '') }));
-    const gapsForPrompt2 = (knowledgeGaps || []).map((g: any) => ({ topic: String(g.topic || g.name || ''), subject: g.subject, confidence: g.confidence, status: g.status }));
-    const messagesForModel = await this.promptBuilder.buildPrompt(userId, conversationContext, message, memForPrompt2, teacherProfile, promptTemplate, gapsForPrompt2, currentStudentModel, adaptive);
-
-    // Try streaming via GroqService
-    let finalContent = '';
-    const messagesForModelWithMemories = messagesForModel;
-
-    const usedStream = await this.groq.stream(messagesForModelWithMemories, async (chunk: string) => {
-      finalContent += chunk;
-      await onChunk(chunk);
-    });
-
-    if (!usedStream) {
-      // fallback to single response
-      const response = await this.groq.chat(messagesForModelWithMemories);
-      finalContent = response.content;
-      await onChunk(finalContent);
-    }
-
+  private async persistAssistantMessage(conversationId: any, userId: number, content: string, tokensUsed?: number | null, model?: string | null) {
     const assistantMsg = {
-      conversationId: conv._id,
+      conversationId,
       userId,
       role: 'assistant',
-      content: finalContent,
-      tokensUsed: null,
-      model: process.env.GROQ_MODEL || null,
+      content,
+      tokensUsed: tokensUsed || 0,
+      model: model || process.env.GROQ_MODEL || null,
       attachments: [],
       createdAt: new Date(),
     };
 
     await this.messages.insertOne(assistantMsg);
-    await this.conversations.updateOne({ _id: conv._id }, { $inc: { messageCount: 1 }, $set: { lastMessageAt: new Date() } });
+    await this.conversations.updateOne({ _id: conversationId }, { $inc: { messageCount: 1 }, $set: { lastMessageAt: new Date() } });
+  }
 
-    // Auto-generate title if not set
+  private async prepareInteraction(userId: number, conversationId: any, message: string, sessionStartedAt: Date) {
+    const academicContext = await this.academicService.buildAcademicContext(userId);
+    const teacherProfile = await this.teacherProfileService.detectProfile(message, academicContext);
+    const promptTemplate = this.promptTemplateService.detectIntent(message);
+
+    const detectedSubject = this.detectSubjectFromMessage(message, academicContext);
+    await this.learningAnalyticsService.recordQuestion(userId, detectedSubject);
+
+    const historyCursor = this.messages.find({ conversationId }).sort({ createdAt: 1 }).limit(50);
+    const history = await historyCursor.toArray();
+    const conversationContext = history.map((m) => ({ role: m.role, content: m.content }));
+
+    const memories: any = await this.memoryService.getRelevantMemories(userId, message, 10);
+
+    try {
+      await this.knowledgeGapsService.detectAndUpsertGaps(userId, academicContext, {
+        message,
+        conversationId: String(conversationId),
+      });
+    } catch (err) {
+      this.logger.warn('Knowledge gap detection failed: ' + err);
+    }
+    const knowledgeGaps = await this.knowledgeGapsService.getTopGaps(userId, 5);
+
+    const analytics = await this.learningAnalyticsService.getAnalytics(userId);
+    const currentStudentModel = await this.resolveStudentModel(userId, academicContext, memories, analytics);
+
+    const adaptive = this.adaptiveLearningService.analyze(message, academicContext, memories, analytics, knowledgeGaps, currentStudentModel);
+
+    let generatedResourceIds: string[] = [];
+    let learningGoals: any[] = [];
+    try {
+      learningGoals = await this.learningGoalsService.listGoals(userId);
+    } catch (err) {
+      this.logger.warn('Learning goals retrieval failed: ' + err);
+    }
+
+    if (adaptive?.triggers?.length) {
+      try {
+        const generated = await this.adaptiveLearningService.generateAutomaticResources(
+          userId,
+          conversationId,
+          adaptive,
+          message,
+          academicContext,
+          currentStudentModel,
+          knowledgeGaps,
+          { learningGoals, teacherProfile },
+        );
+        generatedResourceIds = Object.values(generated?.ids || {}).map((id) => String(id));
+      } catch (err) {
+        this.logger.warn('Automatic resource generation failed: ' + err);
+      }
+    }
+
+    return {
+      academicContext,
+      teacherProfile,
+      promptTemplate,
+      conversationContext,
+      memories,
+      knowledgeGaps,
+      analytics,
+      currentStudentModel,
+      adaptive,
+      generatedResourceIds,
+      learningGoals,
+      sessionStartedAt,
+    };
+  }
+
+  private async buildModelPrompt(userId: number, prep: any, message: string) {
+    const memForPrompt = (prep.memories || []).map((m: any) => ({
+      type: String(m.type || ''),
+      key: String(m.key || m.type || ''),
+      value: String(m.value || ''),
+    }));
+    const gapsForPrompt = (prep.knowledgeGaps || []).map((g: any) => ({
+      topic: String(g.topic || g.name || ''),
+      subject: g.subject,
+      confidence: g.confidence,
+      status: g.status,
+    }));
+
+    return this.promptBuilder.buildPrompt(
+      userId,
+      prep.conversationContext,
+      message,
+      memForPrompt,
+      prep.teacherProfile,
+      prep.promptTemplate,
+      gapsForPrompt,
+      prep.currentStudentModel,
+      prep.adaptive,
+    );
+  }
+
+  private async finalizeInteraction(userId: number, conversationId: any, message: string, prep: any, sessionStartedAt: Date) {
+    const sessionEndedAt = new Date();
+    let historyAll: any[] = [];
+
+    try {
+      const historyAllCursor = this.messages.find({ conversationId }).sort({ createdAt: 1 }).limit(100);
+      historyAll = await historyAllCursor.toArray();
+      const convoMessages = historyAll.map((m) => ({ role: m.role, content: m.content }));
+      await this.memoryService.analyzeAndStore(userId, convoMessages, prep.academicContext);
+    } catch (err) {
+      this.logger.warn('Memory analysis failed: ' + err);
+    }
+
+    let beforeSnapshot: any = prep.currentStudentModel;
+    let updatedModel: any = null;
+    let learningGoalProgress: any[] = [];
+    let generatedResources: any[] = [];
+
+    try {
+      const analytics = await this.learningAnalyticsService.getAnalytics(userId);
+      const memoriesAll = await this.memoryService.getUserMemories(userId);
+      const knowledgeGaps = await this.knowledgeGapsService.getTopGaps(userId, 50);
+      const recentTexts = historyAll.filter((m) => m.role === 'user').map((m) => m.content || '');
+      const recurringMistakes = (memoriesAll || []).filter((m) => ['RECURRING_MISTAKE', 'WEAK_SKILL'].includes(m.type));
+
+      try {
+        generatedResources = await this.generatedResourcesService.listForUser(userId);
+      } catch (err) {
+        // ignore generated resources retrieval
+      }
+
+      beforeSnapshot = await this.studentModelService.get(userId);
+      updatedModel = await this.studentModelService.updateFromSignals(
+        userId,
+        prep.academicContext,
+        analytics,
+        memoriesAll,
+        knowledgeGaps,
+        recentTexts,
+        recurringMistakes,
+        generatedResources,
+        historyAll,
+      );
+
+      const adaptiveSessions = await this.adaptiveSessionsService.listForUser(userId, 10);
+      learningGoalProgress = await this.learningGoalsService.updateProgressFromSignals(userId, {
+        studentModel: updatedModel,
+        analytics,
+        knowledgeGaps,
+        adaptiveSessions,
+        generatedResources,
+      });
+    } catch (err) {
+      this.logger.warn('Student model / learning goals update failed: ' + err);
+    }
+
+    try {
+      await this.adaptiveSessionsService.logSession(
+        userId,
+        conversationId,
+        {
+          startedAt: sessionStartedAt,
+          endedAt: sessionEndedAt,
+          teacherProfile: prep.teacherProfile?.code || null,
+          promptTemplate: prep.promptTemplate?.code || null,
+          adaptive: prep.adaptive || null,
+          teachingStrategy: prep.adaptive?.mode || null,
+          learningGoalProgress,
+        },
+        beforeSnapshot,
+        updatedModel,
+        prep.generatedResourceIds,
+        prep.knowledgeGaps,
+      );
+    } catch (err) {
+      this.logger.warn('Adaptive session logging failed: ' + err);
+    }
+  }
+
+  private async resolveStudentModel(userId: number, academicContext: any, memories: any[], analytics: any) {
+    const persisted = await this.studentModelService.get(userId);
+    if (persisted) return persisted;
+    return this.studentModelService.buildModel(academicContext, memories, analytics);
+  }
+
+  private detectSubjectFromMessage(message: string, academicContext: any): string | null {
+    try {
+      if (academicContext?.subjects && academicContext.subjects.length) {
+        const txt = (message || '').toLowerCase();
+        for (const s of academicContext.subjects) {
+          if (s.name && txt.includes((s.name || '').toLowerCase())) {
+            return s.name;
+          }
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+    return null;
+  }
+
+  private async autoGenerateTitle(conv: any, message: string) {
     try {
       const freshConv = await this.conversations.findOne({ _id: conv._id });
       if (freshConv && !freshConv.title) {
@@ -302,56 +366,54 @@ export class AiService {
     } catch (err) {
       this.logger.warn('Failed to auto-generate title: ' + err);
     }
+  }
 
-    // Analyze conversation and store/update memories using rule-based extractor
-    let historyAll: any[] = [];
-    try {
-      const historyAllCursor = this.messages.find({ conversationId: conv._id }).sort({ createdAt: 1 }).limit(100);
-      historyAll = await historyAllCursor.toArray();
-      const convoMessages = historyAll.map((m) => ({ role: m.role, content: m.content }));
-      await this.memoryService.analyzeAndStore(userId, convoMessages, academicContext);
-    } catch (err) {
-      this.logger.warn('Memory analysis failed: ' + err);
-    }
+  async getDashboard(userId: number) {
+    const [analytics, studentModel, goals, knowledgeGaps, allGaps, resources] = await Promise.all([
+      this.learningAnalyticsService.getAnalytics(userId),
+      this.studentModelService.get(userId),
+      this.learningGoalsService.listGoals(userId),
+      this.knowledgeGapsService.getTopGaps(userId, 10),
+      this.knowledgeGapsService.listIncludingResolved(userId),
+      this.generatedResourcesService.listForUser(userId),
+    ]);
 
-    // Update student model from signals; capture before/after snapshots for adaptive session logging
-    let updatedModel: any = null;
-    let beforeSnapshot: any = null;
-    try {
-      const analytics = await this.learningAnalyticsService.getAnalytics(userId);
-      const memoriesAll = await this.memoryService.getUserMemories(userId);
-      const knowledgeGaps = await this.knowledgeGapsService.getTopGaps(userId, 50);
-      const recentTexts = historyAll.filter((m) => m.role === 'user').map((m) => m.content || '');
-      const recurringMistakes = (memoriesAll || []).filter((m) => ['RECURRING_MISTAKE', 'WEAK_SKILL'].includes(m.type));
-      let generatedResources: any[] = [];
-      try {
-        generatedResources = await this.generatedResourcesService.listForUser(userId);
-      } catch (err) {
-        // ignore generated resources retrieval
-      }
+    const latestSnapshot = studentModel?.snapshots?.[studentModel.snapshots.length - 1];
+    const masteryScore = analytics?.masteryScore ?? latestSnapshot?.masteryScore ?? 0.5;
 
-      beforeSnapshot = await this.studentModelService.get(userId);
-      updatedModel = await this.studentModelService.updateFromSignals(userId, academicContext, analytics, memoriesAll, knowledgeGaps, recentTexts, recurringMistakes, generatedResources, historyAll);
-
-      // Log adaptive session with before/after and resources
-      try {
-        const genIds = []; // in future, collect ids from resource generation
-        await this.adaptiveSessionsService.logSession(userId, conv._id, { teacherProfile: teacherProfile?.code || null, promptTemplate: promptTemplate?.code || null, adaptive: adaptive || null }, beforeSnapshot, updatedModel, genIds, knowledgeGaps);
-      } catch (err) {
-        this.logger.warn('Adaptive session logging failed: ' + err);
-      }
-    } catch (err) {
-      this.logger.warn('Student model update failed: ' + err);
-    }
-
-    // Log adaptive session
-    try {
-      const sessionPayload = { teacherProfile: teacherProfile?.code || null, promptTemplate: promptTemplate?.code || null, adaptive: adaptive || null };
-      await this.adaptiveSessionsService.logSession(userId, conv._id, sessionPayload);
-    } catch (err) {
-      this.logger.warn('Adaptive session logging failed: ' + err);
-    }
-
-    return { conversationId: conv._id, reply: finalContent };
+    return {
+      masteryScore,
+      engagementScore: analytics?.engagementScore ?? studentModel?.engagementScore ?? 0,
+      struggleScore: analytics?.struggleScore ?? 0,
+      strengths: studentModel?.strengths || [],
+      weaknesses: studentModel?.weaknesses || [],
+      subjectLevels: studentModel?.subjectLevels || {},
+      confidencePerSubject: studentModel?.confidencePerSubject || analytics?.confidencePerSubject || {},
+      comprehensionSpeed: studentModel?.comprehensionSpeed || 'NORMAL',
+      recurringMistakes: studentModel?.recurringMistakes || [],
+      activeGoals: (goals || []).filter((goal) => goal && goal.status !== 'completed'),
+      knowledgeGaps: (knowledgeGaps || []).map((gap) => ({
+        id: String(gap._id || gap.id),
+        topic: gap.topic,
+        subject: gap.subject,
+        confidence: gap.confidence,
+        status: gap.status,
+        evidence: gap.evidence || [],
+      })),
+      knowledgeGapsSummary: {
+        detected: (allGaps || []).filter((gap) => gap.status === 'DETECTED').length,
+        improving: (allGaps || []).filter((gap) => gap.status === 'IMPROVING').length,
+        resolved: (allGaps || []).filter((gap) => gap.status === 'RESOLVED').length,
+      },
+      resourcesSummary: {
+        total: resources.length,
+        completed: resources.filter((r) => r.completed).length,
+        byType: resources.reduce((acc: Record<string, number>, resource) => {
+          const type = String(resource.type || resource.resourceType || 'UNKNOWN').toUpperCase();
+          acc[type] = (acc[type] || 0) + 1;
+          return acc;
+        }, {}),
+      },
+    };
   }
 }

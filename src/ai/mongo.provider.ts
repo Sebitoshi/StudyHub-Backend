@@ -9,6 +9,7 @@ export const TEACHER_PROFILES_COLLECTION = 'TEACHER_PROFILES_COLLECTION';
 export const TEACHER_PROMPT_TEMPLATES_COLLECTION = 'TEACHER_PROMPT_TEMPLATES_COLLECTION';
 export const LEARNING_ANALYTICS_COLLECTION = 'LEARNING_ANALYTICS_COLLECTION';
 export const KNOWLEDGE_GAPS_COLLECTION = 'KNOWLEDGE_GAPS_COLLECTION';
+export const KNOWLEDGE_VECTORS_COLLECTION = 'KNOWLEDGE_VECTORS_COLLECTION';
 export const STUDENT_MODELS_COLLECTION = 'STUDENT_MODELS_COLLECTION';
 export const GENERATED_RESOURCES_COLLECTION = 'GENERATED_RESOURCES_COLLECTION';
 export const LEARNING_PATHS_COLLECTION = 'LEARNING_PATHS_COLLECTION';
@@ -40,6 +41,15 @@ export const mongoProviders: Provider[] = [
       const dbName = process.env.MONGODB_DB || 'studyhub';
       const db = client.db(dbName);
       return db.collection('knowledge_gaps');
+    },
+    inject: [MONGO_CLIENT],
+  },
+  {
+    provide: KNOWLEDGE_VECTORS_COLLECTION,
+    useFactory: (client: MongoClient) => {
+      const dbName = process.env.MONGODB_DB || 'studyhub';
+      const db = client.db(dbName);
+      return db.collection('knowledge_vectors');
     },
     inject: [MONGO_CLIENT],
   },

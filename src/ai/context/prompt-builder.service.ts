@@ -108,10 +108,18 @@ export class PromptBuilderService {
     // Adaptive strategy from engine
     if (adaptive) {
       const strat: string[] = [];
-      strat.push(`TeachingMode: ${adaptive.mode}`);
+      const isExamMode = adaptive.mode === 'COACH' || (adaptive.triggers || []).some((trigger: any) => trigger.type === 'EXAM_MODE');
+      strat.push(`TeachingMode: ${isExamMode ? 'EXAM_MODE' : adaptive.mode}`);
+      if (isExamMode) {
+        strat.push('ExamCoachInstructions: Prioriza simulacro, resumen express, flashcards prioritarias, plan intensivo y preguntas tipo examen. Reduce teoría extensa y enfócate en lo evaluable.');
+      }
       if (adaptive.predictedWeaknesses && adaptive.predictedWeaknesses.length) strat.push(`PredictedWeaknesses: ${adaptive.predictedWeaknesses.map((w) => w.topic).join(', ')}`);
       if (adaptive.actions && adaptive.actions.socraticPrompts) strat.push(`SocraticPrompts: ${adaptive.actions.socraticPrompts.join(' | ')}`);
-      if (adaptive.actions && adaptive.actions.resources) strat.push(`SuggestedResources: summary+flashcards+quiz`);
+      if (adaptive.actions && adaptive.actions.generatedResources?.length) {
+        strat.push(`GeneratedResourcesPersisted: ${adaptive.actions.generatedResources.map((resource: any) => resource.type).join(', ')}`);
+      } else if (adaptive.actions && adaptive.actions.resources) {
+        strat.push(`SuggestedResources: summary+flashcards+quiz`);
+      }
       messages.push({ role: 'system', content: `TeachingStrategy:\n${strat.join('\n')}` });
     }
 
@@ -128,6 +136,14 @@ export class PromptBuilderService {
       if (studentModel.weaknesses && studentModel.weaknesses.length) modelPieces.push(`Weaknesses: ${studentModel.weaknesses.join(', ')}`);
       if (studentModel.subjectLevels) modelPieces.push(`SubjectLevels: ${Object.entries(studentModel.subjectLevels).map(([k, v]) => `${k}=${v}`).join(', ')}`);
       if (studentModel.confidencePerSubject) modelPieces.push(`ConfidencePerSubject: ${Object.entries(studentModel.confidencePerSubject).map(([k, v]) => `${k}:${(v as number).toFixed(2)}`).join(', ')}`);
+      if (studentModel.recurringMistakes && studentModel.recurringMistakes.length) modelPieces.push(`RecurringMistakes: ${studentModel.recurringMistakes.join('; ')}`);
+      modelPieces.push(`AdaptationRules:
+- BEGINNER: usa explicaciones simples, analogías, pasos pequeños y una pregunta de comprobación.
+- INTERMEDIATE: usa explicación técnica moderada, ejercicios guiados y conexiones entre conceptos.
+- ADVANCED: usa problemas complejos, casos reales, menos guía y retos de transferencia.
+- Si comprehensionSpeed=SLOW, reduce carga cognitiva y confirma comprensión antes de avanzar.
+- Si comprehensionSpeed=FAST, compacta lo básico y ofrece retos.
+- Si confidencePerSubject es baja o hay recurringMistakes, prioriza corrección de errores antes de teoría nueva.`);
       messages.push({ role: 'system', content: `StudentModel:\n${modelPieces.join('\n')}` });
     }
 

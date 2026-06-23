@@ -16,6 +16,14 @@ export class LearningGoalsRepository {
     return this.col.find({ userId }).sort({ createdAt: -1 }).toArray();
   }
 
+  async findById(id: string) {
+    return this.col.findOne({ _id: new ObjectId(id) });
+  }
+
+  async delete(id: string) {
+    return this.col.deleteOne({ _id: new ObjectId(id) });
+  }
+
   async update(id: string, patch: any) {
     const _id = new ObjectId(id);
     await this.col.updateOne({ _id }, { $set: { ...patch, updatedAt: new Date() } });

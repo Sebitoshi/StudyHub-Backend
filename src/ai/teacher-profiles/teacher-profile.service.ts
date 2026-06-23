@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { TeacherProfileRepository } from './teacher-profile.repository';
 
 @Injectable()
@@ -90,6 +90,48 @@ export class TeacherProfileService {
 
   constructor(private readonly repo: TeacherProfileRepository) {}
 
+  async listProfiles(userId: number) {
+    const systemProfiles = Object.values(this.defaultProfiles).map((profile) => this.serializeProfile(profile, true));
+    const customProfiles = await this.repo.findByUserId(userId);
+    return [...systemProfiles, ...customProfiles.map((profile) => this.serializeProfile(profile, false))];
+  }
+
+  async createProfile(userId: number, payload: any) {
+    const code = String(payload.code || '').toUpperCase();
+    if (this.defaultProfiles[code]) {
+      throw new ForbiddenException('El código coincide con un perfil del sistema');
+    }
+
+    const existing = await this.repo.findByCode(code);
+    if (existing && existing.userId === userId) {
+      throw new ForbiddenException('Ya tienes un perfil personalizado con ese código');
+    }
+
+    const doc = {
+      userId,
+      code,
+      name: payload.name,
+      description: payload.description || '',
+      subjects: payload.subjects || [],
+      systemPrompt: payload.systemPrompt,
+      teachingStyle: payload.teachingStyle || 'adaptive',
+      difficultyLevel: payload.difficultyLevel || 'medium',
+      active: payload.active ?? true,
+    };
+    const id = await this.repo.insert(doc);
+    const created = await this.repo.findById(String(id));
+    return this.serializeProfile(created, false);
+  }
+
+  async updateProfile(userId: number, id: string, payload: any) {
+    const profile = await this.repo.findById(id);
+    if (!profile) throw new NotFoundException('Perfil no encontrado');
+    if (profile.userId !== userId) throw new ForbiddenException('No tienes acceso a este perfil');
+
+    const updated = await this.repo.update(id, payload);
+    return this.serializeProfile(updated, false);
+  }
+
   async getByCode(code: string) {
     const db = await this.repo.findByCode(code);
     if (db) return db;
@@ -127,5 +169,23 @@ export class TeacherProfileService {
     if (/\b(code|function|class|var|let)\b/.test(text)) return this.defaultProfiles.PROGRAMMING_TEACHER;
 
     return this.defaultProfiles.EXAM_COACH;
+  }
+
+  private serializeProfile(profile: any, isSystem: boolean) {
+    return {
+      id: isSystem ? profile.code : String(profile._id || profile.id),
+      code: profile.code,
+      name: profile.name,
+      description: profile.description || '',
+      subjects: profile.subjects || [],
+      systemPrompt: profile.systemPrompt,
+      teachingStyle: profile.teachingStyle,
+      difficultyLevel: profile.difficultyLevel,
+      active: profile.active ?? true,
+      isSystem,
+      userId: profile.userId || null,
+      createdAt: profile.createdAt || null,
+      updatedAt: profile.updatedAt || null,
+    };
   }
 }

@@ -18,6 +18,14 @@ export class KnowledgeGapsRepository {
     return res.value;
   }
 
+  async findByKey(userId: number, subject: string, topic: string) {
+    return this.col.findOne({ userId, subject, topic });
+  }
+
+  async findActive(userId: number) {
+    return this.col.find({ userId, status: { $in: ['DETECTED', 'IMPROVING', 'RESOLVED'] } }).toArray();
+  }
+
   async findByUser(userId: number, limit = 50) {
     return this.col.find({ userId }).sort({ confidence: -1, updatedAt: -1 }).limit(limit).toArray();
   }

@@ -65,9 +65,11 @@ export class StudentModelService {
       if (g.status === 'DETECTED' && g.subject) weaknessesSet.add(g.subject);
     }
     // recurring mistakes map to weaknesses
+    const recurringMistakeLabels: string[] = [];
     for (const rm of recurringMistakes || []) {
       if (rm.subject) weaknessesSet.add(rm.subject);
       else if (rm.topic) weaknessesSet.add(rm.topic);
+      if (rm.value || rm.topic || rm.key) recurringMistakeLabels.push(String(rm.value || rm.topic || rm.key));
     }
 
     // Allow recovery: remove weaknesses if confidence improved over previous snapshot
@@ -111,6 +113,7 @@ export class StudentModelService {
       engagementScore: analytics?.engagementScore ?? ((prev && prev.engagementScore) ?? 0),
       strengths,
       weaknesses,
+      recurringMistakes: Array.from(new Set([...(prev?.recurringMistakes || []), ...recurringMistakeLabels])).slice(-20),
       subjectLevels,
       snapshots: [...((prev && prev.snapshots) || []).slice(-50), snapshot], // keep last 50 snapshots
       lastUpdatedAt: new Date(),
@@ -138,7 +141,6 @@ export class StudentModelService {
         const c = a.correctAnswers || 0;
         confidencePerSubject[subj] = q > 0 ? Math.max(0, Math.min(1, c / q)) : 0.5;
       }
-      // simple mastery as average
       const vals = Object.values(confidencePerSubject);
       masteryScore = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0.5;
     } else if (analyticsOrAggregates && analyticsOrAggregates.confidencePerSubject) {
@@ -147,12 +149,32 @@ export class StudentModelService {
       engagementScore = analyticsOrAggregates.engagementScore || 0.5;
     }
 
+    const subjectLevels: Record<string, 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'> = {};
+    const subjects = academicContext?.subjects?.map((s) => s.name) || Object.keys(confidencePerSubject);
+    for (const subj of Array.from(new Set(subjects || [])) as string[]) {
+      const conf = confidencePerSubject[subj] ?? 0.5;
+      if (conf >= 0.8 && masteryScore >= 0.75) subjectLevels[subj] = 'ADVANCED';
+      else if (conf >= 0.55 || masteryScore >= 0.6) subjectLevels[subj] = 'INTERMEDIATE';
+      else subjectLevels[subj] = 'BEGINNER';
+    }
+
+    const strengths = (memories || []).filter((m) => m.type === 'SUBJECT_PREFERENCE').map((m) => m.value);
+    const weaknesses = (memories || [])
+      .filter((m) => ['SUBJECT_DIFFICULTY', 'WEAK_SKILL', 'RECURRING_MISTAKE'].includes(m.type))
+      .map((m) => m.value || m.key);
+    const recurringMistakes = (memories || []).filter((m) => m.type === 'RECURRING_MISTAKE').map((m) => m.value || m.key);
+
     const model = {
       learningStyle: (memories || []).find((m) => m.type === 'LEARNING_STYLE')?.value || 'mixed',
       academicLevel: academicContext?.level || academicContext?.semester || 'unknown',
       confidencePerSubject,
       masteryScore,
       engagementScore,
+      subjectLevels,
+      strengths,
+      weaknesses,
+      recurringMistakes,
+      comprehensionSpeed: 'NORMAL' as const,
     };
 
     return model;
