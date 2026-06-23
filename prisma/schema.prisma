@@ -125,6 +125,7 @@ model User {
   streak          StudyStreak?
   achievements    UserAchievement[]
   xpHistory       XpHistory[]
+  resume          Resume?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -419,4 +420,121 @@ model XpHistory {
 
   @@index([userId])
   @@map("xp_history")
+}
+
+enum LanguageLevel {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  NATIVE
+}
+
+model Resume {
+  id          Int @id @default(autoincrement())
+
+  userId      Int @unique
+
+  titulo      String?
+  resumen     String?
+
+  user        User @relation(fields: [userId], references: [id])
+
+  experiences Experience[]
+  projects    Project[]
+  educations  Education[]
+  certificates Certificate[]
+  languages   Language[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("resumes")
+}
+
+model Experience {
+  id Int @id @default(autoincrement())
+
+  company      String
+  position     String
+
+  description  String?
+
+  startDate    DateTime
+  endDate      DateTime?
+
+  isCurrent    Boolean @default(false)
+
+  resumeId Int
+  resume   Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@map("experiences")
+}
+
+model Education {
+  id Int @id @default(autoincrement())
+
+  institution String
+
+  degree      String
+
+  startDate DateTime
+
+  endDate DateTime?
+
+  isCurrent Boolean @default(false)
+
+  resumeId Int
+  resume   Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@map("educations")
+}
+
+model Project {
+  id Int @id @default(autoincrement())
+
+  title String
+
+  description String
+
+  githubUrl String?
+
+  liveUrl String?
+
+  technologies String[]
+
+  resumeId Int
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@map("projects")
+}
+
+model Certificate {
+  id Int @id @default(autoincrement())
+
+  title String
+
+  issuer String
+
+  issueDate DateTime?
+
+  credentialUrl String?
+
+  resumeId Int
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@map("certificates")
+}
+
+model Language {
+  id Int @id @default(autoincrement())
+
+  name String
+
+  level LanguageLevel
+
+  resumeId Int
+
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@map("languages")
 }
