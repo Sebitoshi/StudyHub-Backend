@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { SubjectsService } from './subjects.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
@@ -33,6 +33,8 @@ export class SubjectsController {
 
   @Post()
   @ApiOperation({ summary: 'Crear una materia' })
+  @ApiResponse({ status: 201, description: 'Recurso creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   create(
     @CurrentUser() user: { id: number },
     @Body() dto: CreateSubjectDto,
@@ -42,12 +44,15 @@ export class SubjectsController {
 
   @Get()
   @ApiOperation({ summary: 'Obtener todas las materias del usuario' })
+  @ApiResponse({ status: 200, description: 'Lista de recursos' })
   findAll(@CurrentUser() user: { id: number }) {
     return this.subjectsService.findAll(user.id);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Obtener una materia con sus horarios, tareas y notas' })
+  @ApiResponse({ status: 200, description: 'Detalle del recurso' })
+  @ApiResponse({ status: 404, description: 'Recurso no encontrado' })
   findOne(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -57,6 +62,8 @@ export class SubjectsController {
 
   @Put(':id')
   @ApiOperation({ summary: 'Actualizar una materia' })
+  @ApiResponse({ status: 200, description: 'Recurso actualizado' })
+  @ApiResponse({ status: 404, description: 'Recurso no encontrado' })
   update(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -67,6 +74,8 @@ export class SubjectsController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Eliminar una materia' })
+  @ApiResponse({ status: 200, description: 'Recurso eliminado' })
+  @ApiResponse({ status: 404, description: 'Recurso no encontrado' })
   remove(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -78,6 +87,8 @@ export class SubjectsController {
 
   @Post(':id/schedules')
   @ApiOperation({ summary: 'Agregar horario a una materia' })
+  @ApiResponse({ status: 201, description: 'Recurso creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   createSchedule(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -88,6 +99,7 @@ export class SubjectsController {
 
   @Get(':id/schedules')
   @ApiOperation({ summary: 'Obtener horarios de una materia' })
+  @ApiResponse({ status: 200, description: 'Lista de recursos' })
   findSchedules(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -97,6 +109,8 @@ export class SubjectsController {
 
   @Put(':id/schedules/:scheduleId')
   @ApiOperation({ summary: 'Actualizar un horario' })
+  @ApiResponse({ status: 200, description: 'Recurso actualizado' })
+  @ApiResponse({ status: 404, description: 'Recurso no encontrado' })
   updateSchedule(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -108,6 +122,8 @@ export class SubjectsController {
 
   @Delete(':id/schedules/:scheduleId')
   @ApiOperation({ summary: 'Eliminar un horario' })
+  @ApiResponse({ status: 200, description: 'Recurso eliminado' })
+  @ApiResponse({ status: 404, description: 'Recurso no encontrado' })
   removeSchedule(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -120,6 +136,8 @@ export class SubjectsController {
 
   @Post(':id/tasks')
   @ApiOperation({ summary: 'Crear tarea en una materia' })
+  @ApiResponse({ status: 201, description: 'Recurso creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   createTask(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -130,6 +148,7 @@ export class SubjectsController {
 
   @Get(':id/tasks')
   @ApiOperation({ summary: 'Obtener tareas de una materia' })
+  @ApiResponse({ status: 200, description: 'Lista de recursos' })
   findTasks(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -139,6 +158,8 @@ export class SubjectsController {
 
   @Put(':id/tasks/:taskId')
   @ApiOperation({ summary: 'Actualizar una tarea' })
+  @ApiResponse({ status: 200, description: 'Recurso actualizado' })
+  @ApiResponse({ status: 404, description: 'Recurso no encontrado' })
   updateTask(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -150,6 +171,7 @@ export class SubjectsController {
 
   @Post(':id/tasks/:taskId/toggle')
   @ApiOperation({ summary: 'Marcar/desmarcar tarea como completada' })
+  @ApiResponse({ status: 200, description: 'Acción realizada exitosamente' })
   toggleTask(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -160,6 +182,8 @@ export class SubjectsController {
 
   @Delete(':id/tasks/:taskId')
   @ApiOperation({ summary: 'Eliminar una tarea' })
+  @ApiResponse({ status: 200, description: 'Recurso eliminado' })
+  @ApiResponse({ status: 404, description: 'Recurso no encontrado' })
   removeTask(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -172,6 +196,8 @@ export class SubjectsController {
 
   @Post(':id/notes')
   @ApiOperation({ summary: 'Crear nota en una materia' })
+  @ApiResponse({ status: 201, description: 'Recurso creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   createNote(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -182,6 +208,7 @@ export class SubjectsController {
 
   @Get(':id/notes')
   @ApiOperation({ summary: 'Obtener notas de una materia' })
+  @ApiResponse({ status: 200, description: 'Lista de recursos' })
   findNotes(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -191,6 +218,8 @@ export class SubjectsController {
 
   @Put(':id/notes/:noteId')
   @ApiOperation({ summary: 'Actualizar una nota' })
+  @ApiResponse({ status: 200, description: 'Recurso actualizado' })
+  @ApiResponse({ status: 404, description: 'Recurso no encontrado' })
   updateNote(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -202,6 +231,7 @@ export class SubjectsController {
 
   @Post(':id/notes/:noteId/pin')
   @ApiOperation({ summary: 'Fijar/desfijar una nota' })
+  @ApiResponse({ status: 200, description: 'Acción realizada exitosamente' })
   togglePin(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -212,6 +242,8 @@ export class SubjectsController {
 
   @Delete(':id/notes/:noteId')
   @ApiOperation({ summary: 'Eliminar una nota' })
+  @ApiResponse({ status: 200, description: 'Recurso eliminado' })
+  @ApiResponse({ status: 404, description: 'Recurso no encontrado' })
   removeNote(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,

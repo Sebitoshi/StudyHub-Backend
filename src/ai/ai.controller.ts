@@ -209,10 +209,28 @@ export class AiController {
 
   @Get('conversations')
   @ApiOperation({ summary: 'Listar conversaciones del usuario' })
-  async listConversations(@Req() req: any) {
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, example: 'lastMessageAt' })
+  @ApiQuery({ name: 'order', required: false, type: String, example: 'desc' })
+  async listConversations(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('order') order?: string,
+  ) {
     const userId = req.user.id;
-    const convs = await this.ai['conversations'].find({ userId }).sort({ lastMessageAt: -1 }).toArray();
-    return convs;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, Number(limit) || 20));
+    const skip = (pageNum - 1) * limitNum;
+    const sortField = sortBy || 'lastMessageAt';
+    const sortOrder = order === 'asc' ? 1 : -1;
+    const [convs, total] = await Promise.all([
+      this.ai['conversations'].find({ userId }).sort({ [sortField]: sortOrder }).skip(skip).limit(limitNum).toArray(),
+      this.ai['conversations'].countDocuments({ userId }),
+    ]);
+    return { conversations: convs, total, page: pageNum, limit: limitNum };
   }
 
   @Get('conversations/:id')

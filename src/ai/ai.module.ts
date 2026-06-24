@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { GroqService } from './groq.service';
-import { mongoProviders } from './mongo.provider';
+import { mongoProviders, MONGO_CLIENT } from './mongo.provider';
 import { AcademicContextService } from './context/academic-context.service';
 import { PromptBuilderService } from './context/prompt-builder.service';
 import { AdaptiveLearningService } from './adaptive/adaptive-learning.service';
@@ -28,45 +28,56 @@ import { PromptTemplateModule } from './prompt-templates/prompt-template.module'
 import { KnowledgeGapsModule } from './knowledge-gaps/knowledge-gaps.module';
 import { LearningAnalyticsRepository } from './learning-analytics/learning-analytics.repository';
 import { LearningAnalyticsService } from './learning-analytics/learning-analytics.service';
-// import { PromptTemplateService } from './prompt-templates/prompt-template.service'; // <-- Puedes borrar esta importación también
+import { JobMatchingService } from './job-matching/job-matching.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [
-    PrismaModule, 
-    MemoryModule, 
-    TeacherProfileModule, 
+    PrismaModule,
+    MemoryModule,
+    TeacherProfileModule,
     PromptTemplateModule, // <-- ¡Esto ya nos provee el servicio!
-    KnowledgeGapsModule
+    KnowledgeGapsModule,
   ],
   controllers: [AiController],
   providers: [
-    ...mongoProviders, 
-    AiService, 
-    GroqService, 
-    AcademicContextService, 
-    PromptBuilderService, 
-    // PromptTemplateService, <-- ¡BORRA ESTO DE AQUÍ!
-    LearningAnalyticsService, 
+    ...mongoProviders,
+    AiService,
+    GroqService,
+    AcademicContextService,
+    PromptBuilderService,
+    JobMatchingService,
+    LearningAnalyticsService,
     LearningAnalyticsRepository,
-    AdaptiveLearningService, 
-    SocraticService, 
-    ResourceGeneratorService, 
-    LearningPathService, 
-    WeaknessPredictionService, 
-    ExamCoachService, 
+    AdaptiveLearningService,
+    SocraticService,
+    ResourceGeneratorService,
+    LearningPathService,
+    WeaknessPredictionService,
+    ExamCoachService,
     RecommendationService,
-    StudentModelRepository, 
-    StudentModelService, 
-    GeneratedResourcesRepository, 
-    GeneratedResourcesService, 
-    LearningGoalsRepository, 
-    LearningGoalsService, 
-    LearningPathsRepository, 
-    LearningPathsService, 
-    AdaptiveSessionsRepository, 
-    AdaptiveSessionsService
+    StudentModelRepository,
+    StudentModelService,
+    GeneratedResourcesRepository,
+    GeneratedResourcesService,
+    LearningGoalsRepository,
+    LearningGoalsService,
+    LearningPathsRepository,
+    LearningPathsService,
+    AdaptiveSessionsRepository,
+    AdaptiveSessionsService,
   ],
-  exports: [AiService],
+  exports: [
+    AiService,
+    GroqService,
+    JobMatchingService,
+    LearningGoalsService,
+    LearningAnalyticsService,
+    AdaptiveLearningService,
+    ResourceGeneratorService,
+    ExamCoachService,
+    KnowledgeGapsModule,
+    MONGO_CLIENT,
+  ],
 })
 export class AiModule {}

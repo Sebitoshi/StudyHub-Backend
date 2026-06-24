@@ -8,9 +8,10 @@ import { CreateCertificateDto } from './create-certificate.dto';
 import { CreateLanguageDto } from './create-language.dto';
 
 export class CreateResumeDto {
-  @ApiProperty({ description: 'ID del usuario propietario del CV', example: 1 })
+  @ApiProperty({ description: 'ID del usuario propietario del CV', example: 1, required: false })
+  @IsOptional()
   @IsNumber()
-  userId: number;
+  userId?: number;
 
   @ApiProperty({ description: 'Título profesional del CV', example: 'Desarrollador Backend Junior', required: false })
   @IsOptional()

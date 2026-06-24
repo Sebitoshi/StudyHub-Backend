@@ -106,6 +106,15 @@ function renderHtml(resume: any) {
   `;
 }
 
+function generateSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .substring(0, 60);
+}
+
 @Injectable()
 export class ResumeService {
   constructor(private prisma: PrismaService) {}
@@ -123,25 +132,50 @@ export class ResumeService {
     });
 
     if (!resume) {
-      throw new NotFoundException('Resume not found');
+      throw new NotFoundException('CV no encontrado');
     }
 
     return resume;
   }
 
-  async create(dto: CreateResumeDto) {
-    const { userId, titulo, resumen } = dto;
+  async findBySlug(slug: string) {
+    const resume = await this.prisma.resume.findUnique({
+      where: { slug },
+      include: {
+        experiences: true,
+        educations: true,
+        projects: true,
+        certificates: true,
+        languages: true,
+        user: {
+          select: { nombre: true, apellido: true, email: true },
+        },
+      },
+    });
 
+    if (!resume) {
+      throw new NotFoundException('CV no encontrado');
+    }
+
+    return resume;
+  }
+
+  async create(userId: number, dto: CreateResumeDto) {
     const existing = await this.prisma.resume.findUnique({ where: { userId } });
     if (existing) {
       return this.update(userId, dto as any);
     }
 
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const baseSlug = generateSlug(`${user?.nombre || 'user'}-${user?.apellido || userId}`);
+    const slug = dto.slug || `${baseSlug}-${Date.now()}`;
+
     return this.prisma.resume.create({
       data: {
         userId,
-        titulo,
-        resumen,
+        titulo: dto.titulo,
+        resumen: dto.resumen,
+        slug,
         experiences: { create: dto.experiences ?? [] },
         educations: { create: dto.educations ?? [] },
         projects: { create: dto.projects ?? [] },
@@ -161,13 +195,18 @@ export class ResumeService {
   async update(userId: number, dto: UpdateResumeDto) {
     const existing = await this.prisma.resume.findUnique({ where: { userId } });
     if (!existing) {
-      throw new NotFoundException('Resume not found');
+      throw new NotFoundException('CV no encontrado');
     }
 
-    // Update basic fields
-    await this.prisma.resume.update({ where: { userId }, data: { titulo: dto.titulo, resumen: dto.resumen } });
+    await this.prisma.resume.update({
+      where: { userId },
+      data: {
+        titulo: dto.titulo,
+        resumen: dto.resumen,
+        ...(dto.slug ? { slug: dto.slug } : {}),
+      },
+    });
 
-    // Replace nested lists: delete existing and recreate
     await this.prisma.$transaction([
       this.prisma.experience.deleteMany({ where: { resumeId: existing.id } }),
       this.prisma.education.deleteMany({ where: { resumeId: existing.id } }),
@@ -212,7 +251,7 @@ export class ResumeService {
       },
     });
 
-    if (!resume) throw new NotFoundException('Resume not found');
+    if (!resume) throw new NotFoundException('CV no encontrado');
 
     const html = renderHtml(resume);
 

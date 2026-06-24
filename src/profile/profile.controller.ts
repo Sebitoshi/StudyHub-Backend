@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AddObjectiveDto } from './dto/add-objective.dto';
 import { AddSkillDto } from './dto/add-skill.dto';
@@ -37,6 +37,8 @@ export class ProfileController {
 
   @Post('academic')
   @ApiOperation({ summary: 'Crear perfil académico' })
+  @ApiResponse({ status: 201, description: 'Perfil académico creado' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   createAcademic(
     @CurrentUser() user: { id: number },
     @Body() dto: CreateAcademicProfileDto,
@@ -46,12 +48,16 @@ export class ProfileController {
 
   @Get('academic')
   @ApiOperation({ summary: 'Obtener perfil académico' })
+  @ApiResponse({ status: 200, description: 'Perfil académico del usuario' })
+  @ApiResponse({ status: 404, description: 'Perfil no encontrado' })
   findAcademic(@CurrentUser() user: { id: number }) {
     return this.profileService.findAcademicByUser(user.id);
   }
 
   @Put('academic')
   @ApiOperation({ summary: 'Actualizar perfil académico' })
+  @ApiResponse({ status: 200, description: 'Perfil académico actualizado' })
+  @ApiResponse({ status: 404, description: 'Perfil no encontrado' })
   updateAcademic(
     @CurrentUser() user: { id: number },
     @Body() dto: UpdateAcademicProfileDto,
@@ -61,6 +67,7 @@ export class ProfileController {
 
   @Delete('academic')
   @ApiOperation({ summary: 'Eliminar perfil académico' })
+  @ApiResponse({ status: 200, description: 'Perfil académico eliminado' })
   removeAcademic(@CurrentUser() user: { id: number }) {
     return this.profileService.removeAcademic(user.id);
   }
@@ -69,6 +76,8 @@ export class ProfileController {
 
   @Post('professional')
   @ApiOperation({ summary: 'Crear perfil profesional' })
+  @ApiResponse({ status: 201, description: 'Perfil profesional creado' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   createProfessional(
     @CurrentUser() user: { id: number },
     @Body() dto: CreateProfessionalProfileDto,
@@ -78,12 +87,16 @@ export class ProfileController {
 
   @Get('professional')
   @ApiOperation({ summary: 'Obtener perfil profesional' })
+  @ApiResponse({ status: 200, description: 'Perfil profesional del usuario' })
+  @ApiResponse({ status: 404, description: 'Perfil no encontrado' })
   findProfessional(@CurrentUser() user: { id: number }) {
     return this.profileService.findProfessionalByUser(user.id);
   }
 
   @Put('professional')
   @ApiOperation({ summary: 'Actualizar perfil profesional' })
+  @ApiResponse({ status: 200, description: 'Perfil profesional actualizado' })
+  @ApiResponse({ status: 404, description: 'Perfil no encontrado' })
   updateProfessional(
     @CurrentUser() user: { id: number },
     @Body() dto: UpdateProfessionalProfileDto,
@@ -93,6 +106,7 @@ export class ProfileController {
 
   @Delete('professional')
   @ApiOperation({ summary: 'Eliminar perfil profesional' })
+  @ApiResponse({ status: 200, description: 'Perfil profesional eliminado' })
   removeProfessional(@CurrentUser() user: { id: number }) {
     return this.profileService.removeProfessional(user.id);
   }
@@ -101,12 +115,15 @@ export class ProfileController {
 
   @Get('skills')
   @ApiOperation({ summary: 'Obtener habilidades del usuario' })
+  @ApiResponse({ status: 200, description: 'Habilidades del usuario' })
   getUserSkills(@CurrentUser() user: { id: number }) {
     return this.profileService.getUserSkills(user.id);
   }
 
   @Post('skills')
   @ApiOperation({ summary: 'Agregar habilidad al usuario' })
+  @ApiResponse({ status: 201, description: 'Habilidad agregada' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   addSkill(
     @CurrentUser() user: { id: number },
     @Body() dto: AddSkillDto,
@@ -116,6 +133,8 @@ export class ProfileController {
 
   @Put('skills')
   @ApiOperation({ summary: 'Actualizar nivel de habilidad del usuario' })
+  @ApiResponse({ status: 200, description: 'Nivel de habilidad actualizado' })
+  @ApiResponse({ status: 404, description: 'Habilidad no encontrada' })
   updateSkill(
     @CurrentUser() user: { id: number },
     @Body() dto: AddSkillDto,
@@ -125,6 +144,8 @@ export class ProfileController {
 
   @Delete('skills/:skillId')
   @ApiOperation({ summary: 'Eliminar habilidad del usuario' })
+  @ApiResponse({ status: 200, description: 'Habilidad eliminada' })
+  @ApiResponse({ status: 404, description: 'Habilidad no encontrada' })
   removeSkill(
     @CurrentUser() user: { id: number },
     @Param('skillId') skillId: string,
@@ -136,12 +157,15 @@ export class ProfileController {
 
   @Get('objectives')
   @ApiOperation({ summary: 'Obtener objetivos del usuario' })
+  @ApiResponse({ status: 200, description: 'Objetivos del usuario' })
   getUserObjectives(@CurrentUser() user: { id: number }) {
     return this.profileService.getUserObjectives(user.id);
   }
 
   @Post('objectives')
   @ApiOperation({ summary: 'Agregar objetivo al usuario' })
+  @ApiResponse({ status: 201, description: 'Objetivo agregado' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   addObjective(
     @CurrentUser() user: { id: number },
     @Body() dto: AddObjectiveDto,
@@ -151,6 +175,8 @@ export class ProfileController {
 
   @Delete('objectives/:objectiveId')
   @ApiOperation({ summary: 'Eliminar objetivo del usuario' })
+  @ApiResponse({ status: 200, description: 'Objetivo eliminado' })
+  @ApiResponse({ status: 404, description: 'Objetivo no encontrado' })
   removeObjective(
     @CurrentUser() user: { id: number },
     @Param('objectiveId') objectiveId: string,
@@ -165,12 +191,15 @@ export class ProfileController {
 
   @Get('modules')
   @ApiOperation({ summary: 'Obtener módulos del usuario' })
+  @ApiResponse({ status: 200, description: 'Módulos del usuario' })
   getUserModules(@CurrentUser() user: { id: number }) {
     return this.profileService.getUserModules(user.id);
   }
 
   @Post('modules')
   @ApiOperation({ summary: 'Activar/desactivar un módulo' })
+  @ApiResponse({ status: 200, description: 'Estado del módulo actualizado' })
+  @ApiResponse({ status: 404, description: 'Módulo no encontrado' })
   toggleModule(
     @CurrentUser() user: { id: number },
     @Body() dto: ToggleModuleDto,
@@ -180,6 +209,7 @@ export class ProfileController {
 
   @Post('modules/defaults')
   @ApiOperation({ summary: 'Activar módulos por defecto' })
+  @ApiResponse({ status: 200, description: 'Módulos por defecto activados' })
   activateDefaultModules(@CurrentUser() user: { id: number }) {
     return this.profileService.activateDefaultModules(user.id);
   }
@@ -188,12 +218,15 @@ export class ProfileController {
 
   @Get('personal')
   @ApiOperation({ summary: 'Obtener información personal' })
+  @ApiResponse({ status: 200, description: 'Información personal' })
   getPersonalInfo(@CurrentUser() user: { id: number }) {
     return this.profileService.getPersonalInfo(user.id);
   }
 
   @Put('personal')
   @ApiOperation({ summary: 'Actualizar información personal' })
+  @ApiResponse({ status: 200, description: 'Información personal actualizada' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   updatePersonalInfo(
     @CurrentUser() user: { id: number },
     @Body() dto: UpdatePersonalInfoDto,
@@ -205,12 +238,15 @@ export class ProfileController {
 
   @Get('notifications')
   @ApiOperation({ summary: 'Obtener configuración de notificaciones' })
+  @ApiResponse({ status: 200, description: 'Configuración de notificaciones' })
   getNotificationSettings(@CurrentUser() user: { id: number }) {
     return this.profileService.getNotificationSettings(user.id);
   }
 
   @Put('notifications')
   @ApiOperation({ summary: 'Actualizar configuración de notificaciones' })
+  @ApiResponse({ status: 200, description: 'Configuración actualizada' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   updateNotificationSettings(
     @CurrentUser() user: { id: number },
     @Body() dto: UpdateNotificationSettingsDto,
@@ -222,12 +258,15 @@ export class ProfileController {
 
   @Get('privacy')
   @ApiOperation({ summary: 'Obtener configuración de privacidad' })
+  @ApiResponse({ status: 200, description: 'Configuración de privacidad' })
   getPrivacySettings(@CurrentUser() user: { id: number }) {
     return this.profileService.getPrivacySettings(user.id);
   }
 
   @Put('privacy')
   @ApiOperation({ summary: 'Actualizar configuración de privacidad' })
+  @ApiResponse({ status: 200, description: 'Configuración actualizada' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   updatePrivacySettings(
     @CurrentUser() user: { id: number },
     @Body() dto: UpdatePrivacySettingsDto,
@@ -239,12 +278,15 @@ export class ProfileController {
 
   @Post('security/2fa/generate')
   @ApiOperation({ summary: 'Generar secreto para 2FA' })
+  @ApiResponse({ status: 200, description: 'Secreto 2FA generado' })
   generate2faSecret(@CurrentUser() user: { id: number }) {
     return this.profileService.generate2faSecret(user.id);
   }
 
   @Post('security/2fa/verify')
   @ApiOperation({ summary: 'Verificar y habilitar 2FA' })
+  @ApiResponse({ status: 200, description: '2FA habilitado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Token inválido' })
   verifyAndEnable2fa(
     @CurrentUser() user: { id: number },
     @Body() dto: Verify2faDto,
@@ -254,18 +296,22 @@ export class ProfileController {
 
   @Post('security/2fa/disable')
   @ApiOperation({ summary: 'Deshabilitar 2FA' })
+  @ApiResponse({ status: 200, description: '2FA deshabilitado' })
   disable2fa(@CurrentUser() user: { id: number }) {
     return this.profileService.disable2fa(user.id);
   }
 
   @Get('security/sessions')
   @ApiOperation({ summary: 'Obtener sesiones activas' })
+  @ApiResponse({ status: 200, description: 'Sesiones activas' })
   getActiveSessions(@CurrentUser() user: { id: number }) {
     return this.profileService.getActiveSessions(user.id);
   }
 
   @Delete('security/sessions/:id')
   @ApiOperation({ summary: 'Revocar una sesión activa' })
+  @ApiResponse({ status: 200, description: 'Sesión revocada' })
+  @ApiResponse({ status: 404, description: 'Sesión no encontrada' })
   revokeSession(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
@@ -275,6 +321,7 @@ export class ProfileController {
 
   @Get('security/logs')
   @ApiOperation({ summary: 'Obtener historial de accesos' })
+  @ApiResponse({ status: 200, description: 'Historial de accesos' })
   getAccessLogs(@CurrentUser() user: { id: number }) {
     return this.profileService.getAccessLogs(user.id);
   }
@@ -287,12 +334,15 @@ export class SkillsController {
 
   @Get()
   @ApiOperation({ summary: 'Obtener todas las habilidades disponibles' })
+  @ApiResponse({ status: 200, description: 'Todas las habilidades disponibles' })
   findAll() {
     return this.profileService.findAllSkills();
   }
 
   @Post()
   @ApiOperation({ summary: 'Crear una nueva habilidad' })
+  @ApiResponse({ status: 201, description: 'Habilidad creada' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   create(@Body() dto: CreateSkillDto) {
     return this.profileService.createSkill(dto.nombre);
   }
@@ -305,6 +355,7 @@ export class ObjectivesController {
 
   @Get()
   @ApiOperation({ summary: 'Obtener todos los objetivos disponibles' })
+  @ApiResponse({ status: 200, description: 'Todos los objetivos disponibles' })
   findAll() {
     return this.profileService.findAllObjectives();
   }
@@ -317,6 +368,7 @@ export class AppModulesController {
 
   @Get()
   @ApiOperation({ summary: 'Obtener todos los módulos disponibles' })
+  @ApiResponse({ status: 200, description: 'Todos los módulos disponibles' })
   findAll() {
     return this.profileService.findAllModules();
   }

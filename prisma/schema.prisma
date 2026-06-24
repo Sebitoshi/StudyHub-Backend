@@ -39,6 +39,14 @@ enum UserRole {
   ADMIN
 }
 
+enum JobApplicationStatus {
+  SAVED
+  APPLIED
+  INTERVIEW
+  REJECTED
+  HIRED
+}
+
 enum TaskPriority {
   LOW
   MEDIUM
@@ -126,8 +134,16 @@ model User {
   achievements    UserAchievement[]
   xpHistory       XpHistory[]
   resume          Resume?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  resumeAnalyses  ResumeAnalysis[]
+  roadmaps        Roadmap[]
+  savedJobs       SavedJob[]
+  jobApplications JobApplication[]
+  createdGroups     StudyGroup[]       @relation("GroupCreator")
+  groupMemberships  StudyGroupMember[]
+  notifications     Notification[]
+  academicRisks     AcademicRisk[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@map("users")
 }
@@ -308,6 +324,8 @@ model Subject {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  studyGroups  StudyGroup[]
+
   @@index([userId])
   @@map("subjects")
 }
@@ -422,6 +440,18 @@ model XpHistory {
   @@map("xp_history")
 }
 
+enum NotificationType {
+  TASK_DUE
+  CLASS_REMINDER
+  ROADMAP_REMINDER
+  GROUP_SESSION
+  JOB_MATCH
+  INTERVIEW
+  KNOWLEDGE_GAP
+  EXAM_ALERT
+  STREAK_RISK
+}
+
 enum LanguageLevel {
   BASIC
   INTERMEDIATE
@@ -436,6 +466,7 @@ model Resume {
 
   titulo      String?
   resumen     String?
+  slug        String? @unique
 
   user        User @relation(fields: [userId], references: [id])
 
@@ -537,4 +568,196 @@ model Language {
   resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
 
   @@map("languages")
+}
+
+model Job {
+  id           Int      @id @default(autoincrement())
+  title        String
+  company      String
+  description  String
+  location     String?
+  modality     Modality
+  seniority    ProfessionalLevel
+  contractType String?
+  salaryMin    Float?
+  salaryMax    Float?
+  companyLogo  String?
+  isRemote     Boolean  @default(false)
+  requirements String[]
+  skills       String[]
+
+  source       String?
+  sourceUrl    String?
+  externalId   String?
+
+  publishedAt  DateTime @default(now())
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  applications JobApplication[]
+  saves        SavedJob[]
+
+  @@map("jobs")
+}
+
+model SavedJob {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  jobId     Int
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId])
+  @@map("saved_jobs")
+}
+
+model JobApplication {
+  id            Int                  @id @default(autoincrement())
+  userId        Int
+  jobId         Int
+  status        JobApplicationStatus @default(APPLIED)
+  statusHistory Json                 @default("[]")
+  appliedAt     DateTime             @default(now())
+  notes         String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job           Job                  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId])
+  @@map("job_applications")
+}
+
+model Roadmap {
+  id             Int           @id @default(autoincrement())
+  userId         Int
+  title          String
+  description    String?
+  category       String?
+  difficulty     String?
+  estimatedHours Float?
+  generatedByAi  Boolean       @default(true)
+  aiPrompt       Json?
+  
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps          RoadmapStep[]
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@map("roadmaps")
+}
+
+model RoadmapStep {
+  id             Int      @id @default(autoincrement())
+  roadmapId      Int
+  title          String
+  description    String?
+  order          Int
+  skill          String
+  skillCategory  String?
+  estimatedHours Float?
+  completed      Boolean  @default(false)
+
+  roadmap        Roadmap  @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+
+  @@map("roadmap_steps")
+}
+
+model ResumeAnalysis {
+  id               Int      @id @default(autoincrement())
+  userId           Int
+  resumeId         Int?     // Opcional si se sube archivo suelto
+  score            Float
+  atsScore         Float
+  strengths        String[]
+  weaknesses       String[]
+  missingSkills    String[]
+  recommendedRoles String[]
+  recommendations  String[]
+  analyzedAt       DateTime @default(now())
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("resume_analyses")
+}
+
+model StudyGroup {
+  id          Int      @id @default(autoincrement())
+  creatorId   Int
+  name        String
+  description String?
+  subjectId   Int?
+  maxMembers  Int      @default(20)
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  creator      User                @relation("GroupCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  subject      Subject?            @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  members      StudyGroupMember[]
+  sessions     StudyGroupSession[]
+
+  @@map("study_groups")
+}
+
+model StudyGroupMember {
+  id       Int      @id @default(autoincrement())
+  groupId  Int
+  userId   Int
+  role     String   @default("MEMBER")
+  joinedAt DateTime @default(now())
+
+  group StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@map("study_group_members")
+}
+
+model StudyGroupSession {
+  id          Int      @id @default(autoincrement())
+  groupId     Int
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+  createdAt   DateTime @default(now())
+
+  group StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("study_group_sessions")
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  title     String
+  message   String
+  type      NotificationType
+  read      Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+model AcademicRisk {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  score     Float
+  level     String
+  reasons   Json
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("academic_risks")
 }
