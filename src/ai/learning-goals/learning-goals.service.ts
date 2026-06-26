@@ -7,8 +7,8 @@ export class LearningGoalsService {
 
   async createGoal(userId: number, title: string, description: string, targetDate?: Date) {
     const doc = { userId, title, description, targetDate: targetDate || null, progress: 0, status: 'active' };
-    const id = await this.repo.insert(doc);
-    return this.serialize(await this.repo.findById(String(id)));
+    const insertedId = await this.repo.insert(doc);
+    return this.serialize({ _id: insertedId, ...doc });
   }
 
   async listGoals(userId: number) {
@@ -24,13 +24,17 @@ export class LearningGoalsService {
   }
 
   async updateGoalForUser(userId: number, id: string, patch: any) {
-    await this.getGoalForUser(userId, id);
+    const raw = await this.repo.findById(id);
+    if (!raw) throw new NotFoundException('Meta no encontrada');
+    if (raw.userId !== userId) throw new ForbiddenException('No tienes acceso a esta meta');
     const updated = await this.repo.update(id, patch);
     return this.serialize(updated);
   }
 
   async deleteGoalForUser(userId: number, id: string) {
-    await this.getGoalForUser(userId, id);
+    const raw = await this.repo.findById(id);
+    if (!raw) throw new NotFoundException('Meta no encontrada');
+    if (raw.userId !== userId) throw new ForbiddenException('No tienes acceso a esta meta');
     await this.repo.delete(id);
     return { ok: true };
   }
@@ -81,7 +85,7 @@ export class LearningGoalsService {
   private serialize(goal: any) {
     if (!goal) return null;
     return {
-      id: String(goal._id || goal.id),
+      _id: String(goal._id || goal.id),
       userId: goal.userId,
       title: goal.title,
       description: goal.description,

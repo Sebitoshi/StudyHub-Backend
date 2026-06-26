@@ -1,7 +1,9 @@
+import crypto from 'crypto';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -62,14 +64,18 @@ export class AuthService {
       where: { email: dto.email },
     });
 
-    if (!user || !user.password) {
-      throw new UnauthorizedException('Credenciales inválidas');
+    if (!user) {
+      throw new UnauthorizedException('El usuario no existe');
+    }
+
+    if (!user.password) {
+      throw new UnauthorizedException('Esta cuenta usa Google. Inicia sesión con Google.');
     }
 
     const valid = await bcrypt.compare(dto.password, user.password);
 
     if (!valid) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException('La contraseña es incorrecta');
     }
 
     return this.generateToken(user);
@@ -173,6 +179,56 @@ export class AuthService {
     await this.mailService.sendVerificationCode(user.email, code);
 
     return { message: 'Código de verificación reenviado' };
+  }
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (user) {
+      const token = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+      await this.prisma.verificationToken.create({
+        data: {
+          token,
+          type: VerificationTokenType.PASSWORD_RESET,
+          expiresAt,
+          userId: user.id,
+        },
+      });
+
+      await this.mailService.sendPasswordResetEmail(user.email, token);
+    }
+
+    return { message: 'Si el correo existe, recibirás un enlace para restablecer tu contraseña' };
+  }
+
+  async resetPassword(token: string, password: string): Promise<{ message: string }> {
+    const record = await this.prisma.verificationToken.findFirst({
+      where: {
+        token,
+        type: VerificationTokenType.PASSWORD_RESET,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!record) {
+      throw new BadRequestException('Token inválido o expirado');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { password: hashedPassword },
+      }),
+      this.prisma.verificationToken.delete({
+        where: { id: record.id },
+      }),
+    ]);
+
+    return { message: 'Contraseña actualizada correctamente' };
   }
 
   private generateToken(user: {

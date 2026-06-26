@@ -22,124 +22,141 @@ export const mongoProviders: Provider[] = [
     useFactory: async () => {
       const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
       const client = new MongoClient(uri);
-      await client.connect();
+      try {
+        await client.connect();
+      } catch (err) {
+        console.warn('MongoDB no disponible, funciones de IA desactivadas:', (err as Error).message);
+      }
       return client;
     },
   },
   {
     provide: CONVERSATIONS_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('conversations');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('conversations');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: KNOWLEDGE_GAPS_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('knowledge_gaps');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('knowledge_gaps');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: KNOWLEDGE_VECTORS_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('knowledge_vectors');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('knowledge_vectors');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: STUDENT_MODELS_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('student_models');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('student_models');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: GENERATED_RESOURCES_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('generated_resources');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('generated_resources');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: LEARNING_PATHS_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('learning_paths');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('learning_paths');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: LEARNING_GOALS_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('learning_goals');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('learning_goals');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: ADAPTIVE_SESSIONS_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('adaptive_sessions');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('adaptive_sessions');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: MESSAGES_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('ai_messages');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('ai_messages');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: MEMORIES_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('teacher_memories');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('teacher_memories');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: TEACHER_PROFILES_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('teacher_profiles');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('teacher_profiles');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: TEACHER_PROMPT_TEMPLATES_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('teacher_prompt_templates');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('teacher_prompt_templates');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },
   {
     provide: LEARNING_ANALYTICS_COLLECTION,
     useFactory: (client: MongoClient) => {
-      const dbName = process.env.MONGODB_DB || 'studyhub';
-      const db = client.db(dbName);
-      return db.collection('learning_analytics');
+      try {
+        const dbName = process.env.MONGODB_DB || 'studyhub';
+        return client.db(dbName).collection('learning_analytics');
+      } catch { return null as unknown as Collection; }
     },
     inject: [MONGO_CLIENT],
   },

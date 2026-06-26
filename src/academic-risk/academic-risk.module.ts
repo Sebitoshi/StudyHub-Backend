@@ -15,5 +15,6 @@ import { RiskRecommendationService } from './risk-recommendation.service';
     RiskEngineService,
     RiskRecommendationService,
   ],
+  exports: [AcademicRiskService],
 })
 export class AcademicRiskModule {}

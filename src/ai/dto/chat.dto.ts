@@ -1,14 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class ChatDto {
   @ApiPropertyOptional({
-    description: 'ID de la conversación existente. Si se omite, se usa o crea una conversación activa.',
-    example: 1,
+    description: 'ID de la conversación existente (ObjectId de MongoDB). Si se omite, se usa o crea una conversación activa.',
+    example: '64f1a2b3c4d5e6f789012345',
   })
   @IsOptional()
-  @IsInt()
-  conversationId?: number;
+  @IsString()
+  conversationId?: string;
 
   @ApiPropertyOptional({
     description: 'ID del perfil de profesor IA que responderá el mensaje',

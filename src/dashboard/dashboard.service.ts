@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GamificationService } from '../gamification/gamification.service';
+import { AcademicRiskService } from '../academic-risk/academic-risk.service';
+import { LearningGoalsService } from '../ai/learning-goals/learning-goals.service';
 import { TaskStatus } from '../common/enums';
 
 @Injectable()
@@ -8,12 +10,19 @@ export class DashboardService {
   constructor(
     private prisma: PrismaService,
     private gamification: GamificationService,
+    private academicRisk: AcademicRiskService,
+    private learningGoals: LearningGoalsService,
   ) {}
 
   async getSummary(userId: number) {
     const now = new Date();
 
-    const [subjects, tasks, notes, gamification] = await Promise.all([
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { nombre: true, apellido: true },
+    });
+
+    const [subjects, tasks, notes, gamification, risk, goals] = await Promise.all([
       this.prisma.subject.findMany({
         where: { userId },
         include: { schedules: true },
@@ -28,6 +37,8 @@ export class DashboardService {
         take: 5,
       }),
       this.gamification.getProgress(userId),
+      this.academicRisk.getLatest(userId),
+      this.learningGoals.listGoals(userId),
     ]);
 
     const pendingTasks = tasks.filter(
@@ -48,6 +59,7 @@ export class DashboardService {
           })
           .map((sch) => ({
             subject: s.nombre,
+            profesor: s.profesor,
             startTime: sch.startTime,
             endTime: sch.endTime,
             classroom: sch.classroom,
@@ -65,6 +77,7 @@ export class DashboardService {
         dueDate: t.dueDate,
         priority: t.priority,
         subject: subjects.find((s) => s.id === t.subjectId)?.nombre ?? null,
+        subjectColor: subjects.find((s) => s.id === t.subjectId)?.color ?? null,
       }));
 
     const totalTasks = tasks.length;
@@ -76,12 +89,20 @@ export class DashboardService {
     const recentNotes = notes.map((n) => ({
       id: n.id,
       title: n.title,
+      content: n.content,
       isPinned: n.isPinned,
       updatedAt: n.updatedAt,
       subject: subjects.find((s) => s.id === n.subjectId)?.nombre ?? null,
+      subjectColor: subjects.find((s) => s.id === n.subjectId)?.color ?? null,
     }));
 
+    const allGoals = (goals ?? []).filter((g): g is NonNullable<typeof g> => g != null);
+    const activeGoals = allGoals
+      .filter((g) => g.status === 'active')
+      .slice(0, 3);
+
     return {
+      user,
       stats: {
         subjects: subjects.length,
         pendingTasks: pendingTasks.length,
@@ -96,6 +117,16 @@ export class DashboardService {
         streak: gamification.streak,
         achievements: gamification.achievements,
       },
+      academicRisk: risk
+        ? {
+            id: risk.id,
+            score: risk.score,
+            level: risk.level,
+            reasons: risk.reasons,
+            createdAt: risk.createdAt,
+          }
+        : null,
+      activeGoals,
       upcomingClasses,
       upcomingTasks,
       recentNotes,

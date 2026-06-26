@@ -78,7 +78,7 @@ export class AcademicRiskService {
       NotificationType.EXAM_ALERT,
       {
         riskScore: result.riskScore,
-        learningGoalId: goal?.id,
+        learningGoalId: goal?._id,
         studyPlan,
         examTips,
       },

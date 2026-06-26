@@ -37,11 +37,10 @@ export class AiService {
     private readonly learningGoalsService: LearningGoalsService,
   ) {}
 
-  async ensureConversation(userId: number, conversationId?: string | number) {
+  async ensureConversation(userId: number, conversationId?: string) {
     if (conversationId) {
       try {
-        const oid = typeof conversationId === 'string' ? new ObjectId(conversationId) : new ObjectId(String(conversationId));
-        const conv = await this.conversations.findOne({ _id: oid });
+        const conv = await this.conversations.findOne({ _id: new ObjectId(conversationId) });
         if (conv) return conv;
       } catch (err) {
         // ignore invalid id and create new conversation
@@ -64,7 +63,7 @@ export class AiService {
     return await this.conversations.findOne({ _id: res.insertedId });
   }
 
-  async chat(userId: number, conversationId: string | number | undefined, message: string, teacherId?: string) {
+  async chat(userId: number, conversationId: string | undefined, message: string, teacherId?: string) {
     const conv = await this.ensureConversation(userId, conversationId);
     if (!conv) throw new Error('Failed to create or fetch conversation');
 
@@ -85,7 +84,7 @@ export class AiService {
 
   async streamChat(
     userId: number,
-    conversationId: string | number | undefined,
+    conversationId: string | undefined,
     message: string,
     teacherId: string | undefined,
     onChunk: (chunk: string) => Promise<void> | void,

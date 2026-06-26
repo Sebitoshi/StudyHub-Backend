@@ -35,7 +35,7 @@ export class AiController {
   @ApiResponse({ status: 201, description: 'Respuesta generada por el asistente IA' })
   async chat(@Req() req: any, @Body() dto: ChatDto) {
     const userId = req.user.id;
-    const res = await this.ai.chat(userId, dto.conversationId as any, dto.message, dto.teacherId);
+    const res = await this.ai.chat(userId, dto.conversationId, dto.message, dto.teacherId);
     return res;
   }
 
@@ -57,10 +57,11 @@ export class AiController {
     });
 
     try {
-      await this.ai.streamChat(userId, dto.conversationId as any, dto.message, dto.teacherId, async (chunk: string) => {
+      await this.ai.streamChat(userId, dto.conversationId, dto.message, dto.teacherId, async (chunk: string) => {
         if (closed) return;
         const payload = chunk.replace(/\n/g, '\n');
         res.write(`event: message\ndata: ${payload}\n\n`);
+        if (typeof (res as any).flush === 'function') (res as any).flush();
       });
 
       if (!closed) {
@@ -157,8 +158,11 @@ export class AiController {
   @ApiBody({ type: UpdateLearningGoalDto })
   async updateGoal(@Req() req: any, @Param('id') id: string, @Body() dto: UpdateLearningGoalDto) {
     const userId = req.user.id;
-    const patch: any = { ...dto };
-    if (dto.targetDate) patch.targetDate = new Date(dto.targetDate);
+    const patch: any = {};
+    for (const [key, val] of Object.entries(dto)) {
+      if (val !== undefined) patch[key] = val;
+    }
+    if (patch.targetDate) patch.targetDate = new Date(patch.targetDate);
     const goal = await this.learningGoals.updateGoalForUser(userId, id, patch);
     return { goal };
   }

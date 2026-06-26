@@ -44,8 +44,32 @@ export class MailService {
       this.logger.log(`Sent verification code to ${email}`);
     } catch (err) {
       this.logger.error(`Failed to send verification email to ${email}: ${err}`);
-      // fallback to logging the code so the user can still verify via DB or logs
       this.logger.log(`[VERIFICATION CODE FALLBACK] To: ${email} | Code: ${code}`);
+    }
+  }
+
+  async sendPasswordResetEmail(email: string, token: string): Promise<void> {
+    const from = process.env.SMTP_FROM || 'noreply@studyhub.com';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
+    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+
+    if (!this.transporter) {
+      this.logger.log(`[PASSWORD RESET] To: ${email} | Link: ${resetLink}`);
+      return;
+    }
+
+    try {
+      await this.transporter.sendMail({
+        from,
+        to: email,
+        subject: 'Restablece tu contraseña — StudyHub',
+        text: `Haz clic en el siguiente enlace para restablecer tu contraseña: ${resetLink}`,
+        html: `<p>Haz clic en el siguiente enlace para restablecer tu contraseña:</p><p><a href="${resetLink}">${resetLink}</a></p>`,
+      });
+      this.logger.log(`Sent password reset email to ${email}`);
+    } catch (err) {
+      this.logger.error(`Failed to send password reset email to ${email}: ${err}`);
+      this.logger.log(`[PASSWORD RESET FALLBACK] To: ${email} | Link: ${resetLink}`);
     }
   }
 }

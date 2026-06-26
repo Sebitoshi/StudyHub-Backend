@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, UseGuards, HttpCode } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -6,7 +6,9 @@ import { LoginDto } from './dto/login-auth.dto';
 import { RegisterDto } from './dto/register-auth.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendCodeDto } from './dto/resend-code.dto';
-import type { Request } from 'express';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import type { Request, Response } from 'express';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -65,9 +67,41 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Callback de Google OAuth' })
-  @ApiResponse({ status: 200, description: 'Autenticación con Google exitosa' })
+  @ApiResponse({ status: 302, description: 'Redirección al frontend con token' })
   @ApiResponse({ status: 401, description: 'Autenticación con Google fallida' })
-  googleCallback(@Req() req: Request) {
-    return req.user;
+  googleCallback(@Req() req: Request, @Res() res: Response) {
+    const result = req.user as { access_token: string; user: Record<string, unknown> };
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
+    const token = result.access_token;
+    const user = encodeURIComponent(JSON.stringify(result.user));
+    return res.redirect(`${frontendUrl}/auth/callback?token=${token}&user=${user}`);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Enviar enlace de restablecimiento de contraseña' })
+  @ApiResponse({ status: 200, description: 'Correo enviado si la cuenta existe' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Post('reset-password')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Restablecer contraseña con token' })
+  @ApiResponse({ status: 200, description: 'Contraseña actualizada correctamente' })
+  @ApiResponse({ status: 400, description: 'Token inválido o expirado' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.password);
+  }
+
+  @Post('logout')
+  @HttpCode(200)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cerrar sesión' })
+  @ApiResponse({ status: 200, description: 'Sesión cerrada exitosamente' })
+  logout() {
+    return { message: 'Sesión cerrada correctamente' };
   }
 }

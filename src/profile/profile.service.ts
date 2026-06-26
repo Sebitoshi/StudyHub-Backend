@@ -344,7 +344,8 @@ export class ProfileService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    return user;
+    const { password, twoFactorSecret, ...safeUser } = user;
+    return safeUser;
   }
 
   async updatePersonalInfo(userId: number, dto: UpdatePersonalInfoDto) {
@@ -370,7 +371,8 @@ export class ProfileService {
       await this.gamification.addXp(userId, 10, XpActionType.COMPLETE_PROFILE);
     }
 
-    return updated;
+    const { password, twoFactorSecret, ...safeUser } = updated;
+    return safeUser;
   }
 
   // ─── Notifications ──────────────────────────────────
