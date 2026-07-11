@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsString, IsInt } from 'class-validator';
+import { IsEnum, IsString, IsInt, IsOptional } from 'class-validator';
 
 export enum LanguageLevelDto {
   BASIC = 'BASIC',
@@ -9,9 +9,10 @@ export enum LanguageLevelDto {
 }
 
 export class CreateLanguageDto {
-  @ApiProperty({ description: 'ID del CV al que pertenece el idioma', example: 1 })
+  @ApiProperty({ description: 'ID del CV al que pertenece el idioma', example: 1, required: false })
+  @IsOptional()
   @IsInt()
-  resumeId: number;
+  resumeId?: number;
 
   @ApiProperty({ description: 'Nombre del idioma', example: 'Inglés' })
   @IsString()

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -53,13 +54,24 @@ export class RoadmapsController {
   }
 
   @Patch('steps/:stepId/complete')
-  @ApiOperation({ summary: 'Marcar paso de roadmap como completado' })
-  @ApiResponse({ status: 200, description: 'Paso marcado como completado' })
+  @ApiOperation({ summary: 'Alternar estado de completado de un paso' })
+  @ApiResponse({ status: 200, description: 'Estado del paso alternado' })
   @ApiResponse({ status: 404, description: 'Paso no encontrado' })
-  completeStep(
+  toggleStep(
     @CurrentUser() user: { id: number },
     @Param('stepId', ParseIntPipe) stepId: number,
   ) {
-    return this.roadmapsService.completeStep(stepId, user.id);
+    return this.roadmapsService.toggleStep(stepId, user.id);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Eliminar un roadmap' })
+  @ApiResponse({ status: 200, description: 'Roadmap eliminado exitosamente' })
+  @ApiResponse({ status: 404, description: 'Roadmap no encontrado' })
+  deleteRoadmap(
+    @CurrentUser() user: { id: number },
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.roadmapsService.deleteRoadmap(id, user.id);
   }
 }

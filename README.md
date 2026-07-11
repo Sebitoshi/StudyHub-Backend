@@ -1499,7 +1499,7 @@ MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net
 MONGODB_DB=StudyHub
 JWT_SECRET=your-secret
 GROQ_API_KEY=your-groq-key
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-120b
 ```
 
 ## Ejecución

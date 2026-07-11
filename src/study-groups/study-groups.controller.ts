@@ -7,18 +7,26 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiOperation,
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { StudyGroupsService } from './study-groups.service';
 import { GroupRecommendationService } from './group-recommendation.service';
+import { GroupChatService } from './group-chat.service';
+import { GroupChatGateway } from './group-chat.gateway';
+import { CloudinaryService } from './cloudinary.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { CreateSessionDto } from './dto/create-session.dto';
 
@@ -30,6 +38,9 @@ export class StudyGroupsController {
   constructor(
     private readonly groupsService: StudyGroupsService,
     private readonly recommendationService: GroupRecommendationService,
+    private readonly chatService: GroupChatService,
+    private readonly chatGateway: GroupChatGateway,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   @Post()
@@ -96,8 +107,9 @@ export class StudyGroupsController {
   join(
     @CurrentUser() user: { id: number },
     @Param('id', ParseIntPipe) id: number,
+    @Body() body: { password?: string },
   ) {
-    return this.groupsService.join(id, user.id);
+    return this.groupsService.join(id, user.id, body?.password);
   }
 
   @Post(':id/leave')
@@ -133,5 +145,38 @@ export class StudyGroupsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.groupsService.getSessions(id);
+  }
+
+  @Get(':id/messages')
+  @ApiOperation({ summary: 'Obtener historial de mensajes del chat' })
+  getMessages(@Param('id', ParseIntPipe) id: number) {
+    return this.chatService.getMessages(id);
+  }
+
+  @Post(':id/messages/image')
+  @ApiOperation({ summary: 'Subir imagen al chat del grupo' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadImage(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new Error('No file provided');
+    const imageUrl = await this.cloudinaryService.uploadImage(file);
+    const message = await this.chatService.saveMessage(
+      id,
+      user.id,
+      undefined,
+      imageUrl,
+    );
+    this.chatGateway.emitImageMessage(id, message);
+    return message;
   }
 }

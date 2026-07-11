@@ -2,9 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsBoolean, IsDateString, IsOptional, IsString, IsInt } from 'class-validator';
 
 export class CreateEducationDto {
-  @ApiProperty({ description: 'ID del CV al que pertenece la formación', example: 1 })
+  @ApiProperty({ description: 'ID del CV al que pertenece la formación', example: 1, required: false })
+  @IsOptional()
   @IsInt()
-  resumeId: number;
+  resumeId?: number;
 
   @ApiProperty({ description: 'Institución educativa', example: 'Universidad Nacional' })
   @IsString()

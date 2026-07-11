@@ -16,7 +16,7 @@ export class LanguageService {
       data: {
         name: dto.name,
         level: dto.level as any,
-        resumeId: dto.resumeId,
+        resume: { connect: { id: dto.resumeId! } },
       },
     });
   }

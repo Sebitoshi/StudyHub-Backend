@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { GroqService } from './groq.service';
-import { mongoProviders, MONGO_CLIENT } from './mongo.provider';
+import { MongoModule } from './mongo.module';
 import { AcademicContextService } from './context/academic-context.service';
 import { PromptBuilderService } from './context/prompt-builder.service';
 import { AdaptiveLearningService } from './adaptive/adaptive-learning.service';
@@ -33,15 +33,15 @@ import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [
+    MongoModule,
     PrismaModule,
     MemoryModule,
     TeacherProfileModule,
-    PromptTemplateModule, // <-- ¡Esto ya nos provee el servicio!
+    PromptTemplateModule,
     KnowledgeGapsModule,
   ],
   controllers: [AiController],
   providers: [
-    ...mongoProviders,
     AiService,
     GroqService,
     AcademicContextService,
@@ -77,7 +77,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     ResourceGeneratorService,
     ExamCoachService,
     KnowledgeGapsModule,
-    MONGO_CLIENT,
+    MongoModule,
   ],
 })
 export class AiModule {}

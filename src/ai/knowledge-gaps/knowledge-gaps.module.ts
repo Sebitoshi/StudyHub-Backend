@@ -3,7 +3,7 @@ import { KnowledgeGapsService } from './knowledge-gaps.service';
 import { KnowledgeGapsRepository } from './knowledge-gaps.repository';
 import { SemanticDetectorService } from './semantic-detector.service';
 import { KNOWLEDGE_GAP_DETECTOR, VECTOR_STORE } from './knowledge-gap-detector.contract';
-import { mongoProviders } from '../mongo.provider';
+import { MongoModule } from '../mongo.module';
 import { MemoryModule } from '../memory/memory.module';
 import { KnowledgeVectorsRepository } from './knowledge-vectors.repository';
 import { MongoCosineVectorStore } from './vector-store/mongo-cosine.vector-store';
@@ -19,9 +19,8 @@ import { GapRecoveryService } from './gap-recovery.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 
 @Module({
-  imports: [MemoryModule, PrismaModule],
+  imports: [MongoModule, MemoryModule, PrismaModule],
   providers: [
-    ...mongoProviders,
     KnowledgeGapsService,
     KnowledgeGapsRepository,
     KnowledgeVectorsRepository,

@@ -338,6 +338,9 @@ export class ProfileService {
   async getPersonalInfo(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: {
+        progress: true,
+      },
     });
 
     if (!user) {

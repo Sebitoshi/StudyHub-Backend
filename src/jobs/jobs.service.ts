@@ -18,23 +18,57 @@ export class JobsService {
     seniority?: string;
     skills?: string[];
     location?: string;
+    country?: string;
+    city?: string;
     company?: string;
+    search?: string;
+    modality?: string;
+    studentFriendly?: boolean;
   }) {
     const page = filters.page || 1;
     const limit = filters.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
-    if (filters.isRemote !== undefined) where.isRemote = filters.isRemote;
-    if (filters.contractType) where.contractType = filters.contractType;
-    if (filters.salaryMin) where.salaryMin = { gte: filters.salaryMin };
-    if (filters.salaryMax) where.salaryMax = { lte: filters.salaryMax };
-    if (filters.seniority) where.seniority = filters.seniority;
-    if (filters.location) where.location = { contains: filters.location, mode: 'insensitive' };
-    if (filters.company) where.company = { contains: filters.company, mode: 'insensitive' };
+    const conditions: any[] = [];
+    if (filters.isRemote !== undefined) conditions.push({ isRemote: filters.isRemote });
+    if (filters.contractType) conditions.push({ contractType: filters.contractType });
+    if (filters.salaryMin) conditions.push({ salaryMin: { gte: filters.salaryMin } });
+    if (filters.salaryMax) conditions.push({ salaryMax: { lte: filters.salaryMax } });
+    if (filters.seniority) conditions.push({ seniority: filters.seniority });
+    if (filters.location) conditions.push({ location: { contains: filters.location, mode: 'insensitive' } });
+    if (filters.company) conditions.push({ company: { contains: filters.company, mode: 'insensitive' } });
+    if (filters.modality) conditions.push({ modality: filters.modality });
+    if (filters.studentFriendly !== undefined) conditions.push({ studentFriendly: filters.studentFriendly });
     if (filters.skills && filters.skills.length > 0) {
-      where.skills = { hasSome: filters.skills };
+      conditions.push({ skills: { hasSome: filters.skills } });
     }
+
+    if (filters.country) {
+      conditions.push({
+        OR: [
+          { country: { contains: filters.country, mode: 'insensitive' } },
+          { location: { contains: filters.country, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (filters.city) {
+      conditions.push({
+        OR: [
+          { city: { contains: filters.city, mode: 'insensitive' } },
+          { location: { contains: filters.city, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (filters.search) {
+      conditions.push({
+        OR: [
+          { title: { contains: filters.search, mode: 'insensitive' } },
+          { company: { contains: filters.search, mode: 'insensitive' } },
+          { skills: { has: filters.search } },
+        ],
+      });
+    }
+    const where = conditions.length > 0 ? { AND: conditions } : {};
 
     const allowedSortFields = ['publishedAt', 'salaryMin', 'salaryMax', 'title', 'company'];
     const sortField = filters.sortBy && allowedSortFields.includes(filters.sortBy) ? filters.sortBy : 'publishedAt';
@@ -142,6 +176,15 @@ export class JobsService {
         statusHistory: newHistory,
       },
     });
+  }
+
+  async withdrawApplication(userId: number, jobId: number) {
+    const application = await this.prisma.jobApplication.findUnique({
+      where: { userId_jobId: { userId, jobId } },
+    });
+    if (!application) throw new NotFoundException('No te has postulado a este empleo');
+    await this.prisma.jobApplication.delete({ where: { id: application.id } });
+    return { ok: true };
   }
 
   async getApplications(userId: number) {

@@ -45,15 +45,13 @@ export class RoadmapsService {
       if (job) targetRole = job.title;
     }
 
-    if (missingSkills.length === 0) {
-      throw new BadRequestException(
-        'No hay habilidades faltantes para generar un roadmap.',
-      );
-    }
-
     // Call Groq to generate the roadmap steps
+    const skillsContext = missingSkills.length
+      ? `El estudiante necesita aprender específicamente estas habilidades: ${missingSkills.join(', ')}.`
+      : `El estudiante quiere convertirse en "${targetRole}". Determiná las habilidades técnicas clave necesarias y generá un roadmap completo.`;
+
     const prompt = `Genera un plan de estudio (Roadmap) para el rol de "${targetRole}".
-El estudiante necesita aprender específicamente estas habilidades: ${missingSkills.join(', ')}.
+${skillsContext}
 
 Genera un JSON EXACTO con el siguiente esquema (sin markdown, solo el JSON puro):
 {
@@ -73,7 +71,7 @@ Genera un JSON EXACTO con el siguiente esquema (sin markdown, solo el JSON puro)
   ]
 }
 
-Asegúrate de cubrir de forma estructurada y progresiva los missing skills solicitados. Cada missing skill puede dividirse en varios pasos lógicos si es complejo.`;
+Asegúrate de cubrir de forma estructurada y progresiva las habilidades necesarias. Cada habilidad puede dividirse en varios pasos lógicos si es complejo.`;
 
     let roadmapData;
     try {
@@ -145,7 +143,7 @@ Asegúrate de cubrir de forma estructurada y progresiva los missing skills solic
     return roadmap;
   }
 
-  async completeStep(stepId: number, userId: number) {
+  async toggleStep(stepId: number, userId: number) {
     const step = await this.prisma.roadmapStep.findUnique({
       where: { id: stepId },
       include: { roadmap: true },
@@ -157,7 +155,19 @@ Asegúrate de cubrir de forma estructurada y progresiva los missing skills solic
 
     return this.prisma.roadmapStep.update({
       where: { id: stepId },
-      data: { completed: true },
+      data: { completed: !step.completed },
     });
+  }
+
+  async deleteRoadmap(id: number, userId: number) {
+    const roadmap = await this.prisma.roadmap.findFirst({
+      where: { id, userId },
+    });
+
+    if (!roadmap) throw new NotFoundException('Roadmap no encontrado');
+
+    await this.prisma.roadmap.delete({ where: { id } });
+
+    return { message: 'Roadmap eliminado exitosamente' };
   }
 }

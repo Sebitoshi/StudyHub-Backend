@@ -58,6 +58,7 @@ export class DashboardService {
             return sch.startTime >= currentTime;
           })
           .map((sch) => ({
+            subjectId: s.id,
             subject: s.nombre,
             profesor: s.profesor,
             startTime: sch.startTime,
@@ -76,6 +77,7 @@ export class DashboardService {
         title: t.title,
         dueDate: t.dueDate,
         priority: t.priority,
+        subjectId: t.subjectId,
         subject: subjects.find((s) => s.id === t.subjectId)?.nombre ?? null,
         subjectColor: subjects.find((s) => s.id === t.subjectId)?.color ?? null,
       }));

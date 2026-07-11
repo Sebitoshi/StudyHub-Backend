@@ -1,22 +1,14 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EmbeddingsProvider, KnowledgeItem, SemanticSearchResult, VectorStore } from '../knowledge-gap-detector.contract';
 import { cosineSimilarity } from '../cosine.util';
 import { KnowledgeVectorsRepository } from '../knowledge-vectors.repository';
 import { KnowledgeVectorSource } from '../knowledge-vector.types';
 
 @Injectable()
-export class MongoCosineVectorStore implements VectorStore, OnModuleInit {
+export class MongoCosineVectorStore implements VectorStore {
   private readonly logger = new Logger(MongoCosineVectorStore.name);
 
   constructor(private readonly vectorsRepo: KnowledgeVectorsRepository) {}
-
-  async onModuleInit() {
-    try {
-      await this.vectorsRepo.ensureIndexes();
-    } catch (err) {
-      this.logger.warn('Failed to ensure knowledge_vectors indexes: ' + err);
-    }
-  }
 
   async upsert(userId: number, items: Array<KnowledgeItem & { embedding: number[] }>): Promise<void> {
     for (const item of items) {

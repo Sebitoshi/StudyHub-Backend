@@ -7,6 +7,16 @@ import {
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdatePersonalInfoDto {
+  @ApiPropertyOptional({ description: 'Nombre del usuario', example: 'Juan' })
+  @IsOptional()
+  @IsString()
+  nombre?: string;
+
+  @ApiPropertyOptional({ description: 'Apellido del usuario', example: 'Pérez' })
+  @IsOptional()
+  @IsString()
+  apellido?: string;
+
   @ApiPropertyOptional({ description: 'URL de la foto de perfil', example: 'https://example.com/foto.jpg' })
   @IsOptional()
   @IsString()

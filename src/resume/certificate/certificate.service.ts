@@ -18,7 +18,7 @@ export class CertificateService {
         issuer: dto.issuer,
         issueDate: dto.issueDate ? new Date(dto.issueDate) : null,
         credentialUrl: dto.credentialUrl,
-        resumeId: dto.resumeId,
+        resume: { connect: { id: dto.resumeId! } },
       },
     });
   }

@@ -23,6 +23,11 @@ export class CreateGroupDto {
   @IsNumber()
   subjectId?: number;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  subjectName?: string;
+
   @ApiProperty({ required: false, default: 20 })
   @IsOptional()
   @IsNumber()
@@ -34,4 +39,9 @@ export class CreateGroupDto {
   @IsOptional()
   @IsBoolean()
   isPublic?: boolean;
+
+  @ApiProperty({ required: false, description: 'PIN de 4 dígitos para grupos privados' })
+  @IsOptional()
+  @IsString()
+  password?: string;
 }

@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { PromptTemplateService } from './prompt-template.service';
 import { PromptTemplateRepository } from './prompt-template.repository';
-import { mongoProviders } from '../mongo.provider';
+import { MongoModule } from '../mongo.module';
 
 @Module({
-  providers: [...mongoProviders, PromptTemplateService, PromptTemplateRepository],
+  imports: [MongoModule],
+  providers: [PromptTemplateService, PromptTemplateRepository],
   exports: [PromptTemplateService],
 })
 export class PromptTemplateModule {}

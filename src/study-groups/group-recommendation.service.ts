@@ -53,7 +53,7 @@ export class GroupRecommendationService {
       include: {
         creator: { select: { id: true, nombre: true, apellido: true } },
         subject: { select: { id: true, nombre: true } },
-        _count: { select: { members: true } },
+        _count: { select: { members: true, sessions: true } },
       },
       take: 20,
     });

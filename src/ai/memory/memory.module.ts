@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { MemoryService } from './memory.service';
 import { MemoryRepository } from './memory.repository';
-import { mongoProviders } from '../mongo.provider';
+import { MongoModule } from '../mongo.module';
 
 @Module({
-  providers: [...mongoProviders, MemoryService, MemoryRepository],
+  imports: [MongoModule],
+  providers: [MemoryService, MemoryRepository],
   exports: [MemoryService, MemoryRepository],
 })
 export class MemoryModule {}

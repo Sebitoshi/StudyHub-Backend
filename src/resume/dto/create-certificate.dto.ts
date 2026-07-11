@@ -2,9 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsString, IsDateString, IsInt } from 'class-validator';
 
 export class CreateCertificateDto {
-  @ApiProperty({ description: 'ID del CV al que pertenece el certificado', example: 1 })
+  @ApiProperty({ description: 'ID del CV al que pertenece el certificado', example: 1, required: false })
+  @IsOptional()
   @IsInt()
-  resumeId: number;
+  resumeId?: number;
 
   @ApiProperty({ description: 'Nombre del certificado', example: 'AWS Cloud Practitioner' })
   @IsString()

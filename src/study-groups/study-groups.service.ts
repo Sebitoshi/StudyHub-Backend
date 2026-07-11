@@ -19,8 +19,10 @@ export class StudyGroupsService {
         name: dto.name,
         description: dto.description,
         subjectId: dto.subjectId,
+        subjectName: dto.subjectName,
         maxMembers: dto.maxMembers ?? 20,
         isPublic: dto.isPublic ?? true,
+        password: dto.isPublic ? null : (dto.password ?? null),
       },
       include: {
         creator: {
@@ -41,12 +43,13 @@ export class StudyGroupsService {
         orderBy: { [sortBy || 'createdAt']: (order === 'asc' ? 'asc' : 'desc') },
         include: {
           creator: { select: { id: true, nombre: true, apellido: true } },
+          subject: { select: { id: true, nombre: true } },
           members: {
             include: {
               user: { select: { id: true, nombre: true, apellido: true } },
             },
           },
-          _count: { select: { members: true } },
+          _count: { select: { members: true, sessions: true } },
         },
       }),
       this.prisma.studyGroup.count({ where: { isPublic: true } }),
@@ -76,7 +79,7 @@ export class StudyGroupsService {
     return group;
   }
 
-  async join(groupId: number, userId: number) {
+  async join(groupId: number, userId: number, password?: string) {
     const group = await this.prisma.studyGroup.findUnique({
       where: { id: groupId },
       include: { _count: { select: { members: true } } },
@@ -87,6 +90,13 @@ export class StudyGroupsService {
       throw new BadRequestException(
         'El grupo ya alcanzó el máximo de miembros',
       );
+    }
+
+    // Validate password for private groups
+    if (!group.isPublic && group.password) {
+      if (!password || password !== group.password) {
+        throw new BadRequestException('PIN incorrecto');
+      }
     }
 
     const existing = await this.prisma.studyGroupMember.findUnique({
@@ -171,12 +181,13 @@ export class StudyGroupsService {
       },
       include: {
         creator: { select: { id: true, nombre: true, apellido: true } },
+        subject: { select: { id: true, nombre: true } },
         members: {
           include: {
             user: { select: { id: true, nombre: true, apellido: true } },
           },
         },
-        _count: { select: { members: true } },
+        _count: { select: { members: true, sessions: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
