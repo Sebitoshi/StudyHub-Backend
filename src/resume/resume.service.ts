@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 
 function renderHtml(resume: any) {
@@ -352,11 +352,16 @@ export class ResumeService {
 
     const html = renderHtml(resume);
 
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: { width: 1280, height: 800 },
-      executablePath: await chromium.executablePath(),
-    });
+    let executablePath: string;
+    let args: string[];
+    if (process.env.VERCEL) {
+      executablePath = await chromium.executablePath();
+      args = chromium.args;
+    } else {
+      executablePath = process.env.CHROMIUM_PATH || '/home/sebas/.cache/puppeteer/chrome/linux-150.0.7871.24/chrome-linux64/chrome';
+      args = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'];
+    }
+    const browser = await puppeteer.launch({ args, executablePath });
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'load' });
