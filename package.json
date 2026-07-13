@@ -33,6 +33,7 @@
     "@nestjs/websockets": "^11.1.28",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@sparticuz/chromium": "^149.0.0",
     "bcrypt": "^6.0.0",
     "buffer-stream": "^0.0.1",
     "buffer-to-stream": "^1.0.0",
@@ -92,7 +93,8 @@
     "onlyBuiltDependencies": [
       "@prisma/engines",
       "bcrypt",
-      "prisma"
+      "prisma",
+      "@sparticuz/chromium"
     ]
   },
   "jest": {
