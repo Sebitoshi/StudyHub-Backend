@@ -10,6 +10,7 @@ export class GroqService {
     const apiKey = process.env.GROQ_API_KEY;
     this.model = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 
+
     if (!apiKey) {
       throw new Error('GROQ_API_KEY is required for GroqService');
     }
