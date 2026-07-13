@@ -145,7 +145,7 @@ export class GamificationService {
     return this.getProgress(userId);
   }
 
-  private async updateStreak(userId: number) {
+  async updateStreak(userId: number) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 

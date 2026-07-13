@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { GamificationService } from '../gamification/gamification.service';
 import { VerificationTokenType } from '../common/enums';
 import { RegisterDto } from './dto/register-auth.dto';
 import { LoginDto } from './dto/login-auth.dto';
@@ -20,6 +21,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private mailService: MailService,
+    private gamificationService: GamificationService,
   ) {}
 
   private generateVerificationCode(): string {
@@ -78,6 +80,8 @@ export class AuthService {
       throw new UnauthorizedException('La contraseña es incorrecta');
     }
 
+    await this.gamificationService.updateStreak(user.id);
+
     return this.generateToken(user);
   }
 
@@ -109,6 +113,8 @@ export class AuthService {
         },
       });
     }
+
+    await this.gamificationService.updateStreak(user.id);
 
     return this.generateToken(user);
   }
