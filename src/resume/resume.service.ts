@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
 import puppeteer from 'puppeteer';
+import * as fs from 'fs';
+import * as path from 'path';
 
 function renderHtml(resume: any) {
   const user = resume.user || {};
@@ -351,7 +353,11 @@ export class ResumeService {
 
     const html = renderHtml(resume);
 
-    const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const chromePath = '/home/sebas/.cache/puppeteer/chrome/linux-150.0.7871.24/chrome-linux64/chrome';
+    const browser = await puppeteer.launch({
+      executablePath: chromePath,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+    });
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'load' });
