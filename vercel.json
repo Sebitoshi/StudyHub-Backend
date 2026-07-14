@@ -1,3 +1,17 @@
 {
-  "version": 2
+  "version": 2,
+  "outputDirectory": "dist",
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm run build",
+  "framework": null,
+  "routes": [
+    {
+      "handle": [
+        {
+          "source": "/(.*)",
+          "destination": "/dist/main.js"
+        }
+      ]
+    }
+  ]
 }
