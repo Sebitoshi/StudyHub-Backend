@@ -1,6 +1,5 @@
-import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { CorsMiddleware } from './common/cors.middleware';
 import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ResumeModule } from './resume/resume.module';
@@ -39,8 +38,4 @@ import { AcademicRiskModule } from './academic-risk/academic-risk.module';
     AcademicRiskModule,
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(CorsMiddleware).forRoutes('*');
-  }
-}
+export class AppModule {}
