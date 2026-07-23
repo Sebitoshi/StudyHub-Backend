@@ -50,6 +50,7 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
     "pdf-parse": "^2.4.5",
+    "pg": "^8.22.0",
     "puppeteer-core": "^23.11.1",
     "socket.io": "^4.8.3"
   },
@@ -70,6 +71,7 @@
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/passport-jwt": "^4.0.1",
     "@types/passport-local": "^1.0.38",
+    "@types/pg": "^8.20.0",
     "@types/supertest": "^7.0.0",
     "dotenv": "^17.4.2",
     "eslint": "^9.18.0",
