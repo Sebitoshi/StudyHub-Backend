@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { KnowledgeGapsService } from '../ai/knowledge-gaps/knowledge-gaps.service';
 import { LearningGoalsService } from '../ai/learning-goals/learning-goals.service';
 
 @Injectable()
 export class GroupRecommendationService {
+  private readonly logger = new Logger(GroupRecommendationService.name);
+
   constructor(
     private prisma: PrismaService,
     private knowledgeGapsService: KnowledgeGapsService,

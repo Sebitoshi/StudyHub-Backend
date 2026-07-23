@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Logger,
   Param,
   ParseIntPipe,
   Patch,
@@ -23,6 +24,8 @@ import { NotificationsService } from './notifications.service';
 @UseGuards(AuthGuard('jwt'))
 @Controller('notifications')
 export class NotificationsController {
+  private readonly logger = new Logger(NotificationsController.name);
+
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()

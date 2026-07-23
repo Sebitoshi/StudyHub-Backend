@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Logger, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { KnowledgeGapsService } from './knowledge-gaps/knowledge-gaps.service';
 import { GeneratedResourcesService } from './generated-resources/generated-resources.service';
@@ -21,6 +21,8 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, 
 @UseGuards(AuthGuard('jwt'))
 @Controller('ai')
 export class AiController {
+  private readonly logger = new Logger(AiController.name);
+
   constructor(
     private readonly ai: AiService,
     private readonly knowledgeGaps: KnowledgeGapsService,

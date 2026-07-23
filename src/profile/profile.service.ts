@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -20,6 +21,8 @@ import { XpActionType } from '../common/enums';
 
 @Injectable()
 export class ProfileService {
+  private readonly logger = new Logger(ProfileService.name);
+
   constructor(
     private prisma: PrismaService,
     private gamification: GamificationService,

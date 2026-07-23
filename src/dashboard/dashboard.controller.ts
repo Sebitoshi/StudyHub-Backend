@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Logger, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -9,6 +9,8 @@ import { DashboardService } from './dashboard.service';
 @Controller('dashboard')
 @UseGuards(AuthGuard('jwt'))
 export class DashboardController {
+  private readonly logger = new Logger(DashboardController.name);
+
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('summary')

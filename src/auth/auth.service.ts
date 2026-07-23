@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -17,6 +18,8 @@ import { LoginDto } from './dto/login-auth.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -29,11 +32,13 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
+    this.logger.log(`Register attempt for email: ${dto.email}`);
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
     if (existing) {
+      this.logger.warn(`Registration failed: email ${dto.email} already exists`);
       throw new ConflictException('El correo ya está registrado');
     }
 
@@ -57,30 +62,36 @@ export class AuthService {
     });
 
     await this.mailService.sendVerificationCode(user.email, code);
+    this.logger.log(`User registered successfully: ${user.email} (id: ${user.id})`);
 
     return this.generateToken(user);
   }
 
   async login(dto: LoginDto) {
+    this.logger.log(`Login attempt for email: ${dto.email}`);
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
     if (!user) {
+      this.logger.warn(`Login failed: user not found for ${dto.email}`);
       throw new UnauthorizedException('El usuario no existe');
     }
 
     if (!user.password) {
+      this.logger.warn(`Login failed: Google account for ${dto.email}`);
       throw new UnauthorizedException('Esta cuenta usa Google. Inicia sesión con Google.');
     }
 
     const valid = await bcrypt.compare(dto.password, user.password);
 
     if (!valid) {
+      this.logger.warn(`Login failed: invalid password for ${dto.email}`);
       throw new UnauthorizedException('La contraseña es incorrecta');
     }
 
     await this.gamificationService.updateStreak(user.id);
+    this.logger.log(`Login successful for ${dto.email} (id: ${user.id})`);
 
     return this.generateToken(user);
   }
@@ -120,11 +131,13 @@ export class AuthService {
   }
 
   async verifyEmail(email: string, code: string) {
+    this.logger.log(`Email verification attempt for: ${email}`);
     const user = await this.prisma.user.findUnique({
       where: { email },
     });
 
     if (!user) {
+      this.logger.warn(`Email verification failed: user not found for ${email}`);
       throw new BadRequestException('Usuario no encontrado');
     }
 
@@ -142,6 +155,7 @@ export class AuthService {
     });
 
     if (!token) {
+      this.logger.warn(`Email verification failed: invalid code for ${email}`);
       throw new BadRequestException('Código de verificación inválido o expirado');
     }
 
@@ -155,6 +169,7 @@ export class AuthService {
       }),
     ]);
 
+    this.logger.log(`Email verified successfully for: ${email}`);
     return { message: 'Correo verificado correctamente' };
   }
 
@@ -188,6 +203,7 @@ export class AuthService {
   }
 
   async forgotPassword(email: string): Promise<{ message: string }> {
+    this.logger.log(`Forgot password request for: ${email}`);
     const user = await this.prisma.user.findUnique({ where: { email } });
 
     if (user) {
@@ -210,6 +226,7 @@ export class AuthService {
   }
 
   async resetPassword(token: string, password: string): Promise<{ message: string }> {
+    this.logger.log('Password reset attempt');
     const record = await this.prisma.verificationToken.findFirst({
       where: {
         token,

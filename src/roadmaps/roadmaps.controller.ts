@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Param,
   ParseIntPipe,
   Patch,
@@ -20,6 +21,8 @@ import { GenerateRoadmapDto } from './dto/generate-roadmap.dto';
 @Controller('roadmaps')
 @UseGuards(AuthGuard('jwt'))
 export class RoadmapsController {
+  private readonly logger = new Logger(RoadmapsController.name);
+
   constructor(private readonly roadmapsService: RoadmapsService) {}
 
   @Post('generate')

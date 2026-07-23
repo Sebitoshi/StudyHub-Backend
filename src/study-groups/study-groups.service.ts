@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -10,6 +11,8 @@ import { CreateSessionDto } from './dto/create-session.dto';
 
 @Injectable()
 export class StudyGroupsService {
+  private readonly logger = new Logger(StudyGroupsService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async create(userId: number, dto: CreateGroupDto) {

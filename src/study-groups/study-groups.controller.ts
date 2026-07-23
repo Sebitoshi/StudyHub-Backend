@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Logger,
   Param,
   ParseIntPipe,
   Post,
@@ -35,6 +36,8 @@ import { CreateSessionDto } from './dto/create-session.dto';
 @UseGuards(AuthGuard('jwt'))
 @Controller('groups')
 export class StudyGroupsController {
+  private readonly logger = new Logger(StudyGroupsController.name);
+
   constructor(
     private readonly groupsService: StudyGroupsService,
     private readonly recommendationService: GroupRecommendationService,

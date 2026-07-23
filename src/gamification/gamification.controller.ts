@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Logger, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -9,6 +9,8 @@ import { GamificationService } from './gamification.service';
 @Controller('gamification')
 @UseGuards(AuthGuard('jwt'))
 export class GamificationController {
+  private readonly logger = new Logger(GamificationController.name);
+
   constructor(private readonly gamificationService: GamificationService) {}
 
   @Get('progress')

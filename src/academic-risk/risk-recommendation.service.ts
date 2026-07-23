@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 @Injectable()
 export class RiskRecommendationService {
+  private readonly logger = new Logger(RiskRecommendationService.name);
   getRecommendations(
     level: string,
     reasons: string[],

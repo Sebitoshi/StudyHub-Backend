@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Param,
   ParseIntPipe,
   Post,
@@ -27,6 +28,8 @@ import { UpdateNoteDto } from './dto/update-note.dto';
 @Controller('subjects')
 @UseGuards(AuthGuard('jwt'))
 export class SubjectsController {
+  private readonly logger = new Logger(SubjectsController.name);
+
   constructor(private readonly subjectsService: SubjectsService) {}
 
   // ─── Subjects ─────────────────────────────────────

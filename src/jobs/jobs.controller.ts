@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards, DefaultValuePipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Logger, Param, ParseIntPipe, Patch, Post, Query, UseGuards, DefaultValuePipe } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -14,6 +14,8 @@ import { JobMatchingService } from '../ai/job-matching/job-matching.service';
 @Controller('jobs')
 @UseGuards(AuthGuard('jwt'))
 export class JobsController {
+  private readonly logger = new Logger(JobsController.name);
+
   constructor(
     private readonly jobsService: JobsService,
     private readonly jobMatchingService: JobMatchingService,

@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -11,6 +12,8 @@ import { GenerateRoadmapDto } from './dto/generate-roadmap.dto';
 
 @Injectable()
 export class RoadmapsService {
+  private readonly logger = new Logger(RoadmapsService.name);
+
   constructor(
     private prisma: PrismaService,
     private groq: GroqService,

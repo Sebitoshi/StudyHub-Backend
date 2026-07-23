@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { XpActionType } from '../common/enums';
 
@@ -31,6 +31,8 @@ function xpForNextLevel(level: number): number {
 
 @Injectable()
 export class GamificationService {
+  private readonly logger = new Logger(GamificationService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async getProgress(userId: number) {

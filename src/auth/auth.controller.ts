@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, Res, UseGuards, HttpCode } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Post, Req, Res, UseGuards, HttpCode } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -13,6 +13,8 @@ import type { Request, Response } from 'express';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
@@ -74,6 +76,7 @@ export class AuthController {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
     const token = result.access_token;
     const user = encodeURIComponent(JSON.stringify(result.user));
+    this.logger.log(`Google OAuth callback, redirecting to frontend`);
     return res.redirect(`${frontendUrl}/auth/callback?token=${token}&user=${user}`);
   }
 

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { KnowledgeGapsService } from '../ai/knowledge-gaps/knowledge-gaps.service';
 import { LearningAnalyticsService } from '../ai/learning-analytics/learning-analytics.service';
@@ -13,6 +13,8 @@ const WEIGHTS = {
 
 @Injectable()
 export class RiskEngineService {
+  private readonly logger = new Logger(RiskEngineService.name);
+
   constructor(
     private prisma: PrismaService,
     private knowledgeGapsService: KnowledgeGapsService,

@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Param,
   Post,
   Put,
@@ -31,6 +32,8 @@ import { ProfileService } from './profile.service';
 @Controller('profile')
 @UseGuards(AuthGuard('jwt'))
 export class ProfileController {
+  private readonly logger = new Logger(ProfileController.name);
+
   constructor(private readonly profileService: ProfileService) {}
 
   // ─── Academic ───────────────────────────────────────

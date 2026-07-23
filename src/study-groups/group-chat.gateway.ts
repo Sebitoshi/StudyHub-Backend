@@ -6,6 +6,7 @@ import {
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
+import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { GroupChatService } from './group-chat.service';
 import { JwtService } from '@nestjs/jwt';
@@ -15,6 +16,8 @@ import { JwtService } from '@nestjs/jwt';
   cors: { origin: '*' },
 })
 export class GroupChatGateway implements OnGatewayConnection {
+  private readonly logger = new Logger(GroupChatGateway.name);
+
   @WebSocketServer()
   server: Server;
 
@@ -35,7 +38,9 @@ export class GroupChatGateway implements OnGatewayConnection {
       
       const payload = this.jwtService.verify(token);
       client.data.user = payload;
+      this.logger.log(`Client connected: ${client.id} (user: ${payload.sub})`);
     } catch (error) {
+      this.logger.warn(`Connection rejected: ${client.id} - ${error.message}`);
       client.disconnect();
     }
   }

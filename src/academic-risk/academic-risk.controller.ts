@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Logger,
   Param,
   ParseIntPipe,
   Post,
@@ -16,6 +17,8 @@ import { AcademicRiskService } from './academic-risk.service';
 @UseGuards(AuthGuard('jwt'))
 @Controller('risk')
 export class AcademicRiskController {
+  private readonly logger = new Logger(AcademicRiskController.name);
+
   constructor(private readonly academicRiskService: AcademicRiskService) {}
 
   @Get()

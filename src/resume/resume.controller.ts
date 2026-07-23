@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Res, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Param, Post, Put, Res, UseGuards, ForbiddenException } from '@nestjs/common';
 import type { Response } from 'express';
 import { ResumeService } from './resume.service';
 import { CreateResumeDto } from './dto/create-resume.dto';
@@ -10,6 +10,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagg
 @ApiTags('Resume')
 @Controller('resume')
 export class ResumeController {
+  private readonly logger = new Logger(ResumeController.name);
+
   constructor(private service: ResumeService) {}
 
   @Get('me')

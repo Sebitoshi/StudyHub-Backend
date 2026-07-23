@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,6 +9,8 @@ import { GroqService } from '../ai/groq.service';
 
 @Injectable()
 export class ResumeAnalyzerService {
+  private readonly logger = new Logger(ResumeAnalyzerService.name);
+
   constructor(
     private prisma: PrismaService,
     private groq: GroqService,

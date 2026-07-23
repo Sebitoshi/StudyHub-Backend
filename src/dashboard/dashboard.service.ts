@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GamificationService } from '../gamification/gamification.service';
 import { AcademicRiskService } from '../academic-risk/academic-risk.service';
@@ -7,6 +7,8 @@ import { TaskStatus } from '../common/enums';
 
 @Injectable()
 export class DashboardService {
+  private readonly logger = new Logger(DashboardService.name);
+
   constructor(
     private prisma: PrismaService,
     private gamification: GamificationService,
@@ -15,6 +17,7 @@ export class DashboardService {
   ) {}
 
   async getSummary(userId: number) {
+    this.logger.log(`Fetching dashboard summary for user ${userId}`);
     const now = new Date();
 
     const user = await this.prisma.user.findUnique({

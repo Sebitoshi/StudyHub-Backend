@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Logger,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -23,6 +24,8 @@ import { ResumeAnalyzerService } from './resume-analyzer.service';
 @Controller('resume-analyzer')
 @UseGuards(AuthGuard('jwt'))
 export class ResumeAnalyzerController {
+  private readonly logger = new Logger(ResumeAnalyzerController.name);
+
   constructor(private readonly resumeAnalyzerService: ResumeAnalyzerService) {}
 
   @Post('analyze')

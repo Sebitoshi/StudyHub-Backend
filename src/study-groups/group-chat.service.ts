@@ -1,8 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class GroupChatService {
+  private readonly logger = new Logger(GroupChatService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async getMessages(groupId: number, limit = 50) {

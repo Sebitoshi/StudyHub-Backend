@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JobApplicationStatus } from '@prisma/client';
 
 @Injectable()
 export class JobsService {
+  private readonly logger = new Logger(JobsService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async findAll(filters: {

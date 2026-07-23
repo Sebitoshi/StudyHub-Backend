@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateResumeDto } from './dto/create-resume.dto';
 import { UpdateResumeDto } from './dto/update-resume.dto';
@@ -194,6 +194,8 @@ function generateSlug(text: string): string {
 
 @Injectable()
 export class ResumeService {
+  private readonly logger = new Logger(ResumeService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async findByUser(userId: number) {

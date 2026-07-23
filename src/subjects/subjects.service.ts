@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -17,6 +18,8 @@ import { TaskStatus, XpActionType } from '../common/enums';
 
 @Injectable()
 export class SubjectsService {
+  private readonly logger = new Logger(SubjectsService.name);
+
   constructor(
     private prisma: PrismaService,
     private gamification: GamificationService,
@@ -35,14 +38,17 @@ export class SubjectsService {
   // ─── Subjects ─────────────────────────────────────
 
   async create(userId: number, dto: CreateSubjectDto) {
+    this.logger.log(`Creating subject "${dto.nombre}" for user ${userId}`);
     const subject = await this.prisma.subject.create({
       data: { ...dto, userId },
     });
     await this.gamification.addXp(userId, 10, XpActionType.CREATE_SUBJECT);
+    this.logger.log(`Subject created (id: ${subject.id})`);
     return subject;
   }
 
   async findAll(userId: number) {
+    this.logger.log(`Fetching all subjects for user ${userId}`);
     return this.prisma.subject.findMany({
       where: { userId },
       include: {
@@ -70,6 +76,7 @@ export class SubjectsService {
 
   async remove(subjectId: number, userId: number) {
     await this.findSubjectOrThrow(subjectId, userId);
+    this.logger.log(`Deleting subject ${subjectId} for user ${userId}`);
     await this.prisma.subject.delete({ where: { id: subjectId } });
     return { message: 'Materia eliminada' };
   }
