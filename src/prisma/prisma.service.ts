@@ -9,7 +9,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   constructor() {
     const dbUrl = new URL(process.env.DATABASE_URL!);
-    dbUrl.searchParams.delete('sslmode');
+    dbUrl.searchParams.set('sslmode', 'no-verify');
     const pool = new Pool({
       connectionString: dbUrl.toString(),
       ssl: { rejectUnauthorized: false },
