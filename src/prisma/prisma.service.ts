@@ -3,21 +3,31 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    // Permite conexiones TLS a bases de datos en la nube con certificados auto-firmados o cadenas personalizadas (Aiven, Neon, etc.)
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-    const rawUrl = process.env.DATABASE_URL || '';
-    const dbUrl = new URL(rawUrl);
-    dbUrl.searchParams.delete('sslmode');
-    dbUrl.searchParams.delete('ssl');
+    let cleanUrl = process.env.DATABASE_URL || '';
+    if (cleanUrl) {
+      try {
+        const dbUrl = new URL(cleanUrl);
+        dbUrl.searchParams.delete('sslmode');
+        dbUrl.searchParams.delete('ssl');
+        cleanUrl = dbUrl.toString();
+        // Sobrescribir process.env.DATABASE_URL globalmente para evitar que el runtime de Prisma re-lea sslmode=require
+        process.env.DATABASE_URL = cleanUrl;
+      } catch (err) {
+        console.warn('Could not parse DATABASE_URL string');
+      }
+    }
 
     const pool = new Pool({
-      connectionString: dbUrl.toString(),
+      connectionString: cleanUrl,
       ssl: { rejectUnauthorized: false },
     });
     const adapter = new PrismaPg(pool);
@@ -29,4 +39,5 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     this.logger.log('Database connected');
   }
 }
+
 
