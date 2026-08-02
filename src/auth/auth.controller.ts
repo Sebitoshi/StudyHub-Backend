@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Logger, Post, Req, Res, UseGuards, HttpCode } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -15,7 +16,10 @@ import type { Request, Response } from 'express';
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Registrar un nuevo usuario' })
@@ -73,7 +77,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Autenticación con Google fallida' })
   googleCallback(@Req() req: Request, @Res() res: Response) {
     const result = req.user as { access_token: string; user: Record<string, unknown> };
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4200';
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:4200';
     const token = result.access_token;
     const user = encodeURIComponent(JSON.stringify(result.user));
     this.logger.log(`Google OAuth callback, redirecting to frontend`);
