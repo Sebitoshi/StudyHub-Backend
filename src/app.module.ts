@@ -15,6 +15,7 @@ import { ResumeAnalyzerModule } from './resume-analyzer/resume-analyzer.module';
 import { StudyGroupsModule } from './study-groups/study-groups.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AcademicRiskModule } from './academic-risk/academic-risk.module';
+import { StudyTimerModule } from './study-timer/study-timer.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AcademicRiskModule } from './academic-risk/academic-risk.module';
     StudyGroupsModule,
     NotificationsModule,
     AcademicRiskModule,
+    StudyTimerModule,
   ],
 })
 export class AppModule {}

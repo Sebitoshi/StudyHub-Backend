@@ -69,6 +69,7 @@ enum XpActionType {
   COMPLETE_PROFILE
   DAILY_STREAK
   ACHIEVEMENT_UNLOCK
+  STUDY_SESSION
 }
 
 enum AchievementCategory {
@@ -147,6 +148,7 @@ model User {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   groupMessages        GroupMessage[]
+  studyTimerSessions   StudyTimerSession[]
 
   @@map("users")
 }
@@ -328,6 +330,7 @@ model Subject {
   updatedAt   DateTime   @updatedAt
 
   studyGroups StudyGroup[]
+  studyTimerSessions StudyTimerSession[]
 
   @@index([userId])
   @@map("subjects")
@@ -787,4 +790,21 @@ model GroupMessage {
 
   @@index([groupId])
   @@map("group_messages")
+}
+
+model StudyTimerSession {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  subjectId       Int?
+  durationMinutes Int
+  technique       String   // e.g., "POMODORO_25_5", "POMODORO_50_10", "DEEP_BLOCK_90"
+  xpEarned        Int      @default(0)
+  completedAt     DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([subjectId])
+  @@map("study_timer_sessions")
 }
