@@ -61,6 +61,11 @@ enum TaskStatus {
   OVERDUE
 }
 
+enum EventType {
+  EVENT
+  EXAM
+}
+
 enum XpActionType {
   CREATE_SUBJECT
   CREATE_TASK
@@ -149,6 +154,8 @@ model User {
   updatedAt            DateTime              @updatedAt
   groupMessages        GroupMessage[]
   studyTimerSessions   StudyTimerSession[]
+  calendarEvents       CalendarEvent[]
+  googleCalendarToken  GoogleCalendarToken?
 
   @@map("users")
 }
@@ -331,6 +338,7 @@ model Subject {
 
   studyGroups StudyGroup[]
   studyTimerSessions StudyTimerSession[]
+  calendarEvents CalendarEvent[]
 
   @@index([userId])
   @@map("subjects")
@@ -807,4 +815,38 @@ model StudyTimerSession {
   @@index([userId])
   @@index([subjectId])
   @@map("study_timer_sessions")
+}
+
+model CalendarEvent {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  title         String
+  description   String?
+  startAt       DateTime
+  endAt         DateTime
+  allDay        Boolean   @default(false)
+  color         String    @default("#3b82f6")
+  type          EventType @default(EVENT)
+  subjectId     Int?
+  googleEventId String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([startAt])
+  @@map("calendar_events")
+}
+
+model GoogleCalendarToken {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("google_calendar_tokens")
 }

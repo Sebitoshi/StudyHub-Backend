@@ -16,6 +16,7 @@ import { StudyGroupsModule } from './study-groups/study-groups.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AcademicRiskModule } from './academic-risk/academic-risk.module';
 import { StudyTimerModule } from './study-timer/study-timer.module';
+import { CalendarModule } from './calendar/calendar.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { StudyTimerModule } from './study-timer/study-timer.module';
     NotificationsModule,
     AcademicRiskModule,
     StudyTimerModule,
+    CalendarModule,
   ],
 })
 export class AppModule {}
