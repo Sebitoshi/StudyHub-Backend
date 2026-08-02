@@ -1,12 +1,12 @@
 import { Controller, Post, Get, Body, UseGuards, Request } from '@nestjs/common';
 import { StudyTimerService } from './study-timer.service';
 import { CreateStudySessionDto } from './dto/create-study-session.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('Study Timer')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(AuthGuard('jwt'))
 @Controller('study-timer')
 export class StudyTimerController {
   constructor(private readonly studyTimerService: StudyTimerService) {}
