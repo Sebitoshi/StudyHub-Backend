@@ -8,8 +8,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    const dbUrl = new URL(process.env.DATABASE_URL!);
-    dbUrl.searchParams.set('sslmode', 'no-verify');
+    // Permite conexiones TLS a bases de datos en la nube con certificados auto-firmados o cadenas personalizadas (Aiven, Neon, etc.)
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+    const rawUrl = process.env.DATABASE_URL || '';
+    const dbUrl = new URL(rawUrl);
+    dbUrl.searchParams.delete('sslmode');
+    dbUrl.searchParams.delete('ssl');
+
     const pool = new Pool({
       connectionString: dbUrl.toString(),
       ssl: { rejectUnauthorized: false },
@@ -23,3 +29,4 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     this.logger.log('Database connected');
   }
 }
+
