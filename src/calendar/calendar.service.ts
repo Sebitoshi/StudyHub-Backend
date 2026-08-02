@@ -125,7 +125,7 @@ export class CalendarService {
   async getGoogleAuthUrl(userId: number) {
     const clientId = this.config.get<string>('GOOGLE_CLIENT_ID');
     const redirectUri = this.config.get<string>('GOOGLE_CALENDAR_REDIRECT_URI')
-      || `${this.config.get<string>('BACKEND_URL') || 'https://study-hub-backend-gablfori5-sebitasdowns-projects.vercel.app'}/calendar/google/callback`;
+      || `${this.config.get<string>('BACKEND_URL') || 'https://study-hub-backend-sigma.vercel.app'}/calendar/google/callback`;
 
     const params = new URLSearchParams({
       client_id: clientId!,
@@ -303,7 +303,7 @@ export class CalendarService {
     const clientId = this.config.get<string>('GOOGLE_CLIENT_ID');
     const clientSecret = this.config.get<string>('GOOGLE_CLIENT_SECRET');
     const redirectUri = this.config.get<string>('GOOGLE_CALENDAR_REDIRECT_URI')
-      || `${this.config.get<string>('BACKEND_URL') || 'https://study-hub-backend-gablfori5-sebitasdowns-projects.vercel.app'}/calendar/google/callback`;
+      || `${this.config.get<string>('BACKEND_URL') || 'https://study-hub-backend-sigma.vercel.app'}/calendar/google/callback`;
 
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
