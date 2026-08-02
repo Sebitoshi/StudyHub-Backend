@@ -20,10 +20,10 @@ export class CalendarController {
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
-    const user = req.user as { sub: number };
+    const user = req.user as { id: number };
     const defaultStart = start || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
     const defaultEnd = end || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString();
-    return this.calendarService.getEvents(user.sub, defaultStart, defaultEnd);
+    return this.calendarService.getEvents(user.id, defaultStart, defaultEnd);
   }
 
   @Get('exams/upcoming')
@@ -31,8 +31,8 @@ export class CalendarController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener próximos exámenes (30 días)' })
   getUpcomingExams(@Req() req: Request) {
-    const user = req.user as { sub: number };
-    return this.calendarService.getUpcomingExams(user.sub);
+    const user = req.user as { id: number };
+    return this.calendarService.getUpcomingExams(user.id);
   }
 
   @Post('events')
@@ -40,8 +40,8 @@ export class CalendarController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear un evento' })
   createEvent(@Req() req: Request, @Body() dto: CreateCalendarEventDto) {
-    const user = req.user as { sub: number };
-    return this.calendarService.createEvent(user.sub, dto);
+    const user = req.user as { id: number };
+    return this.calendarService.createEvent(user.id, dto);
   }
 
   @Patch('events/:id')
@@ -53,8 +53,8 @@ export class CalendarController {
     @Param('id') id: string,
     @Body() dto: UpdateCalendarEventDto,
   ) {
-    const user = req.user as { sub: number };
-    return this.calendarService.updateEvent(user.sub, Number(id), dto);
+    const user = req.user as { id: number };
+    return this.calendarService.updateEvent(user.id, Number(id), dto);
   }
 
   @Delete('events/:id')
@@ -62,8 +62,8 @@ export class CalendarController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Eliminar un evento' })
   deleteEvent(@Req() req: Request, @Param('id') id: string) {
-    const user = req.user as { sub: number };
-    return this.calendarService.deleteEvent(user.sub, Number(id));
+    const user = req.user as { id: number };
+    return this.calendarService.deleteEvent(user.id, Number(id));
   }
 
   @Get('google/connect')
@@ -71,8 +71,8 @@ export class CalendarController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener URL de conexión con Google Calendar' })
   async googleConnect(@Req() req: Request) {
-    const user = req.user as { sub: number };
-    return this.calendarService.getGoogleAuthUrl(user.sub);
+    const user = req.user as { id: number };
+    return this.calendarService.getGoogleAuthUrl(user.id);
   }
 
   @Get('google/callback')
@@ -93,8 +93,8 @@ export class CalendarController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Sincronizar eventos con Google Calendar' })
   syncFromGoogle(@Req() req: Request) {
-    const user = req.user as { sub: number };
-    return this.calendarService.syncFromGoogle(user.sub);
+    const user = req.user as { id: number };
+    return this.calendarService.syncFromGoogle(user.id);
   }
 
   @Delete('google/disconnect')
@@ -102,8 +102,8 @@ export class CalendarController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Desconectar Google Calendar' })
   disconnectGoogle(@Req() req: Request) {
-    const user = req.user as { sub: number };
-    return this.calendarService.disconnectGoogle(user.sub);
+    const user = req.user as { id: number };
+    return this.calendarService.disconnectGoogle(user.id);
   }
 
   @Get('google/status')
@@ -111,8 +111,8 @@ export class CalendarController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Verificar si Google Calendar está conectado' })
   async googleStatus(@Req() req: Request) {
-    const user = req.user as { sub: number };
-    const connected = await this.calendarService.isGoogleConnected(user.sub);
+    const user = req.user as { id: number };
+    const connected = await this.calendarService.isGoogleConnected(user.id);
     return { connected };
   }
 }
