@@ -23,7 +23,7 @@ export class NotificationSchedulerService {
         status: { not: 'COMPLETED' },
         dueDate: { gte: now, lte: in24h },
       },
-      include: { subject: { select: { userId: true, nombre: true } } },
+      include: { subject: { select: { id: true, userId: true, nombre: true } } },
     });
 
     for (const task of tasks) {
@@ -32,7 +32,7 @@ export class NotificationSchedulerService {
         'Tarea próxima a vencer',
         `"${task.title}" de ${task.subject.nombre} vence en menos de 24h`,
         NotificationType.TASK_DUE,
-        { taskId: task.id, subjectName: task.subject.nombre },
+        { taskId: task.id, subjectId: task.subject.id, subjectName: task.subject.nombre },
       );
     }
 
@@ -51,7 +51,7 @@ export class NotificationSchedulerService {
     const schedules = await this.prisma.schedule.findMany({
       where: { dayOfWeek: currentDay },
       include: {
-        subject: { select: { userId: true, nombre: true, profesor: true } },
+        subject: { select: { id: true, userId: true, nombre: true, profesor: true } },
       },
     });
 
@@ -62,7 +62,7 @@ export class NotificationSchedulerService {
           'Clase próxima a iniciar',
           `${sched.subject.nombre} con ${sched.subject.profesor || 'profesor asignado'} en ${sched.classroom || 'salón por definir'} a las ${sched.startTime}`,
           NotificationType.CLASS_REMINDER,
-          { scheduleId: sched.id, subjectName: sched.subject.nombre },
+          { scheduleId: sched.id, subjectId: sched.subject.id, subjectName: sched.subject.nombre },
         );
       }
     }
@@ -127,7 +127,7 @@ export class NotificationSchedulerService {
           'Sesión de estudio próxima',
           `"${session.title}" del grupo "${session.group.name}" comienza en 1 hora`,
           NotificationType.GROUP_SESSION,
-          { sessionId: session.id, groupName: session.group.name },
+          { sessionId: session.id, groupId: session.group.id, groupName: session.group.name },
         );
       }
     }
