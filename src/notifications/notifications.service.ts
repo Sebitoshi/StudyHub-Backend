@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationType } from '@prisma/client';
+import { NotificationsGateway } from './notifications.gateway';
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsGateway: NotificationsGateway,
+  ) {}
 
   async findAll(userId: number, page = 1, limit = 50, sortBy?: string, order?: string) {
     const skip = (page - 1) * limit;
@@ -52,9 +56,18 @@ export class NotificationsService {
     type: NotificationType,
     metadata?: any,
   ) {
-    return this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: { userId, title, message, type, metadata: metadata ?? undefined },
     });
+
+    // Emitir en vivo por WebSocket al usuario destinatario
+    try {
+      this.notificationsGateway.emitToUser(userId, notification);
+    } catch (error) {
+      this.logger.warn(`Failed to emit notification via socket: ${error.message}`);
+    }
+
+    return notification;
   }
 
   async getUnreadCount(userId: number) {
