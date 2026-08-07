@@ -590,7 +590,7 @@ Redirige a: `${FRONTEND_URL}/auth/callback?token=...&user=...`
 ]
 
 // DELETE /study-timer/sessions — Response 200
-{ "success": true }
+{ "success": true, "xpReverted": 320 }
 ```
 
 ---

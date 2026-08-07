@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudySessionDto } from './dto/create-study-session.dto';
 import { XpActionType } from '@prisma/client';
+import { calculateLevel } from '../gamification/gamification.service';
 
 @Injectable()
 export class StudyTimerService {
@@ -51,8 +52,8 @@ export class StudyTimerService {
       if (progress) {
         const newXp = progress.xp + xpEarned;
         const newTotalXp = progress.totalXp + xpEarned;
-        // Simple level up logic: 100 XP per level
-        const newLevel = Math.floor(newTotalXp / 100) + 1;
+        // Misma fórmula de niveles que GamificationService (LEVEL_THRESHOLDS)
+        const newLevel = calculateLevel(newTotalXp);
 
         await tx.userProgress.update({
           where: { userId },
@@ -120,7 +121,37 @@ export class StudyTimerService {
   }
 
   async clearSessions(userId: number) {
-    await this.prisma.studyTimerSession.deleteMany({ where: { userId } });
-    return { success: true };
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Sumar el XP de las sesiones que se van a eliminar
+      const sessions = await tx.studyTimerSession.findMany({
+        where: { userId },
+        select: { xpEarned: true },
+      });
+      const totalXpToRevert = sessions.reduce((sum, s) => sum + s.xpEarned, 0);
+
+      // 2. Eliminar las sesiones y su historial de XP (ledger)
+      await tx.studyTimerSession.deleteMany({ where: { userId } });
+      await tx.xpHistory.deleteMany({
+        where: { userId, action: XpActionType.STUDY_SESSION },
+      });
+
+      // 3. Revertir el XP en user_progress (totalXp, xp y nivel)
+      if (totalXpToRevert > 0) {
+        const progress = await tx.userProgress.findUnique({ where: { userId } });
+        if (progress) {
+          const newTotalXp = Math.max(0, progress.totalXp - totalXpToRevert);
+          await tx.userProgress.update({
+            where: { userId },
+            data: {
+              totalXp: newTotalXp,
+              xp: newTotalXp % 100,
+              level: calculateLevel(newTotalXp),
+            },
+          });
+        }
+      }
+
+      return { success: true, xpReverted: totalXpToRevert };
+    });
   }
 }

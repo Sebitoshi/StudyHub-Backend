@@ -13,7 +13,7 @@ const XP_VALUES: Record<string, number> = {
 
 const LEVEL_THRESHOLDS = [0, 100, 250, 500, 800, 1200, 1700, 2300, 3000, 4000];
 
-function calculateLevel(totalXp: number): number {
+export function calculateLevel(totalXp: number): number {
   let level = 1;
   for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
     if (totalXp >= LEVEL_THRESHOLDS[i]) {
