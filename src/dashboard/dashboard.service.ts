@@ -138,4 +138,94 @@ export class DashboardService {
       completionRate,
     };
   }
+
+  /**
+   * Ranking global: usuarios con más racha y con más horas de estudio.
+   */
+  async getLeaderboard(userId: number) {
+    const limit = 10;
+
+    // ── Top racha (currentStreak) ──
+    const streaks = await this.prisma.studyStreak.findMany({
+      where: { currentStreak: { gt: 0 } },
+      orderBy: [{ currentStreak: 'desc' }, { bestStreak: 'desc' }, { userId: 'asc' }],
+      take: limit,
+      select: {
+        userId: true,
+        currentStreak: true,
+        bestStreak: true,
+        user: {
+          select: { nombre: true, apellido: true, foto: true },
+        },
+      },
+    });
+
+    // ── Top horas de estudio (suma de minutos de todas las sesiones) ──
+    const hoursAgg = await this.prisma.studyTimerSession.groupBy({
+      by: ['userId'],
+      _sum: { durationMinutes: true },
+      orderBy: [{ _sum: { durationMinutes: 'desc' } }, { userId: 'asc' }],
+      take: limit,
+    });
+
+    const hourUserIds = hoursAgg.map((h) => h.userId);
+    const hourUsers =
+      hourUserIds.length > 0
+        ? await this.prisma.user.findMany({
+            where: { id: { in: hourUserIds } },
+            select: { id: true, nombre: true, apellido: true, foto: true },
+          })
+        : [];
+
+    const hoursById = new Map(hourUsers.map((u) => [u.id, u]));
+
+    const byHours = hoursAgg
+      .map((h) => {
+        const u = hoursById.get(h.userId);
+        if (!u) return null;
+        return {
+          userId: u.id,
+          nombre: u.nombre,
+          apellido: u.apellido,
+          foto: u.foto,
+          totalMinutes: h._sum.durationMinutes ?? 0,
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => e != null);
+
+    // ── Posición GLOBAL del usuario actual (aunque no esté en el top) ──
+    const myStreak = streaks.find((s) => s.userId === userId);
+    const rankByStreak = myStreak
+      ? (await this.prisma.studyStreak.count({
+          where: { currentStreak: { gt: myStreak.currentStreak } },
+        })) + 1
+      : null;
+
+    const myMinutes =
+      hoursAgg.find((h) => h.userId === userId)?._sum.durationMinutes ?? 0;
+    const rankByHours =
+      myMinutes > 0
+        ? (await this.prisma.studyTimerSession.groupBy({
+            by: ['userId'],
+            _sum: { durationMinutes: true },
+            having: { durationMinutes: { _sum: { gt: myMinutes } } },
+          })).length + 1
+        : null;
+
+    return {
+      byStreak: streaks.map((s) => ({
+        userId: s.userId,
+        nombre: s.user.nombre,
+        apellido: s.user.apellido,
+        foto: s.user.foto,
+        currentStreak: s.currentStreak,
+        bestStreak: s.bestStreak,
+      })),
+      byHours,
+      me: {
+        rankByStreak,
+        rankByHours,
+      },
+    };
+  }
 }

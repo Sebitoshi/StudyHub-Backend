@@ -23,4 +23,15 @@ export class DashboardController {
   getSummary(@CurrentUser() user: { id: number }) {
     return this.dashboardService.getSummary(user.id);
   }
+
+  @Get('leaderboard')
+  @ApiOperation({
+    summary: 'Obtener ranking de estudiantes',
+    description:
+      'Devuelve los usuarios con más racha y con más horas de estudio, más la posición del usuario actual.',
+  })
+  @ApiResponse({ status: 200, description: 'Ranking de estudiantes' })
+  getLeaderboard(@CurrentUser() user: { id: number }) {
+    return this.dashboardService.getLeaderboard(user.id);
+  }
 }

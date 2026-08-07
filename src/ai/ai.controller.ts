@@ -61,8 +61,9 @@ export class AiController {
     try {
       const result = await this.ai.streamChat(userId, dto.conversationId, dto.message, dto.teacherId, async (chunk: string) => {
         if (closed) return;
-        const payload = chunk.replace(/\n/g, '\n');
-        res.write(`event: message\ndata: ${payload}\n\n`);
+        // JSON.stringify escapa los saltos de línea del chunk para no romper el frame SSE
+        // (un \n\n dentro de data: se interpretaría como separador de eventos).
+        res.write(`event: message\ndata: ${JSON.stringify(chunk)}\n\n`);
         if (typeof (res as any).flush === 'function') (res as any).flush();
       });
 
