@@ -32,7 +32,10 @@ export class AcademicRiskService {
         userId,
         score: result.riskScore,
         level: result.level,
-        reasons: result.reasons,
+        reasons: {
+          summary: result.reasons,
+          factors: result.factors,
+        },
       },
     });
 
@@ -44,7 +47,10 @@ export class AcademicRiskService {
       id: risk.id,
       score: result.riskScore,
       level: result.level,
-      reasons: result.reasons,
+      reasons: {
+        summary: result.reasons,
+        factors: result.factors,
+      },
       recommendations: recs,
       details: {
         gapScore: result.gapScore,
@@ -143,10 +149,21 @@ export class AcademicRiskService {
   }
 
   async getLatest(userId: number) {
-    return this.prisma.academicRisk.findFirst({
+    const row = await this.prisma.academicRisk.findFirst({
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
+    if (!row) return null;
+    // Las recomendaciones se calculan del nivel + resumen de razones guardados,
+    // para que la página las muestre también al cargar (no solo tras recalcular).
+    // Se toleran filas antiguas cuyo `reasons` era un array de strings.
+    const rawReasons: any = row.reasons;
+    const summary = Array.isArray(rawReasons) ? rawReasons : rawReasons?.summary || [];
+    return {
+      ...row,
+      reasons: Array.isArray(rawReasons) ? { summary: rawReasons, factors: null } : rawReasons,
+      recommendations: this.recommendations.getRecommendations(row.level, summary),
+    };
   }
 
   async getHistory(userId: number, limit = 20) {

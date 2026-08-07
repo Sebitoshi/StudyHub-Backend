@@ -78,6 +78,34 @@ export class RiskEngineService {
       confidenceScore,
       roadmapScore,
       engagementScore,
+      // Estructura ponderada con datos reales para el desglose del frontend.
+      factors: {
+        knowledgeGaps: {
+          score: Math.round(gapScore * 30),
+          max: 30,
+          gapsCount: activeGaps.length,
+        },
+        overdueTasks: {
+          score: Math.round(overdueScore * 25),
+          max: 25,
+          overdueCount: overdueTasks.length,
+        },
+        confidenceIA: {
+          score: Math.round(confidenceScore * 20),
+          max: 20,
+          avgConfidence: analytics?.masteryScore ?? 0.5,
+        },
+        roadmaps: {
+          score: Math.round(roadmapScore * 15),
+          max: 15,
+          progress: +(1 - roadmapScore).toFixed(2),
+        },
+        engagement: {
+          score: Math.round(engagementScore * 10),
+          max: 10,
+          engagement: analytics?.engagementScore ?? 0.5,
+        },
+      },
     };
   }
 
