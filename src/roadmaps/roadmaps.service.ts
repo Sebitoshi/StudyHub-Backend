@@ -284,17 +284,20 @@ Asegúrate de cubrir de forma estructurada y progresiva las habilidades necesari
 
     let roadmapData;
     try {
-      const groqResponse = await this.groq.chat([
+      // chatJson aplica JSON mode, max_tokens amplio, reparación de JSON truncado y reintentos
+      const { data } = await this.groq.chatJson([
         { role: 'user', content: prompt },
       ]);
-      const cleanedJsonStr = groqResponse.content
-        .replace(/```json/g, '')
-        .replace(/```/g, '')
-        .trim();
-      roadmapData = JSON.parse(cleanedJsonStr);
+      roadmapData = data;
     } catch (e) {
       console.error('Error parsing Groq response for Roadmap Generate:', e);
       throw new BadRequestException('Error al generar el roadmap con IA');
+    }
+
+    if (!Array.isArray(roadmapData?.steps) || !roadmapData.steps.length) {
+      throw new BadRequestException(
+        'La IA no devolvió un roadmap válido. Intenta de nuevo.',
+      );
     }
 
     // Save Roadmap to PostgreSQL (Prisma)
