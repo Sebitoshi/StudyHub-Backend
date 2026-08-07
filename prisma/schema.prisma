@@ -883,3 +883,39 @@ model GoogleCalendarToken {
 
   @@map("google_calendar_tokens")
 }
+
+model SandboxExercise {
+  id          Int            @id @default(autoincrement())
+  userId      Int
+  title       String
+  language    String
+  description String         @default("")
+  code        String         @default("")
+  tests       Json           @default("[]")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  attempts SandboxAttempt[]
+
+  @@index([userId])
+  @@map("sandbox_exercises")
+}
+
+model SandboxAttempt {
+  id           Int            @id @default(autoincrement())
+  userId       Int
+  exerciseId   Int?
+  language     String
+  code         String         @default("")
+  output       String         @default("")
+  passed       Boolean        @default(false)
+  testedCases  Int            @default(0)
+  passedCases  Int            @default(0)
+  createdAt    DateTime       @default(now())
+
+  exercise SandboxExercise? @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([exerciseId])
+  @@map("sandbox_attempts")
+}
