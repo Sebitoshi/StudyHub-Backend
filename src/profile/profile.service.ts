@@ -12,7 +12,6 @@ import { CreateProfessionalProfileDto } from './dto/create-professional-profile.
 import { UpdateProfessionalProfileDto } from './dto/update-professional-profile.dto';
 import { AddSkillDto } from './dto/add-skill.dto';
 import { AddObjectiveDto } from './dto/add-objective.dto';
-import { ToggleModuleDto } from './dto/toggle-module.dto';
 import { UpdatePersonalInfoDto } from './dto/update-personal-info.dto';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
 import { UpdatePrivacySettingsDto } from './dto/update-privacy-settings.dto';
@@ -282,58 +281,6 @@ export class ProfileService {
     await this.prisma.userObjective.delete({
       where: { userId_objectiveId: { userId, objectiveId } },
     });
-  }
-
-  // ─── Modules ────────────────────────────────────────────
-
-  async findAllModules() {
-    return this.prisma.appModule.findMany({ orderBy: { nombre: 'asc' } });
-  }
-
-  async getUserModules(userId: number) {
-    return this.prisma.userModule.findMany({
-      where: { userId },
-      include: { module: true },
-    });
-  }
-
-  async toggleModule(userId: number, dto: ToggleModuleDto) {
-    const appModule = await this.prisma.appModule.findUnique({
-      where: { id: dto.moduleId },
-    });
-
-    if (!appModule) {
-      throw new NotFoundException('Módulo no encontrado');
-    }
-
-    const existing = await this.prisma.userModule.findUnique({
-      where: { userId_moduleId: { userId, moduleId: dto.moduleId } },
-    });
-
-    if (existing) {
-      await this.prisma.userModule.delete({
-        where: { userId_moduleId: { userId, moduleId: dto.moduleId } },
-      });
-      return { activo: false, module: appModule };
-    }
-
-    await this.prisma.userModule.create({
-      data: { userId, moduleId: dto.moduleId },
-    });
-    return { activo: true, module: appModule };
-  }
-
-  async activateDefaultModules(userId: number) {
-    const defaults = await this.prisma.appModule.findMany({
-      where: { activoDefecto: true },
-    });
-
-    await this.prisma.userModule.createMany({
-      data: defaults.map((m) => ({ userId, moduleId: m.id })),
-      skipDuplicates: true,
-    });
-
-    return this.getUserModules(userId);
   }
 
   // ─── Personal Info ─────────────────────────────────────

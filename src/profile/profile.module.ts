@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import {
-  AppModulesController,
   ObjectivesController,
   ProfileController,
   SkillsController,
@@ -12,7 +11,6 @@ import { ProfileService } from './profile.service';
     ProfileController,
     SkillsController,
     ObjectivesController,
-    AppModulesController,
   ],
   providers: [ProfileService],
 })

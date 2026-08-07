@@ -18,7 +18,6 @@ import { AddSkillDto } from './dto/add-skill.dto';
 import { CreateAcademicProfileDto } from './dto/create-academic-profile.dto';
 import { CreateProfessionalProfileDto } from './dto/create-professional-profile.dto';
 import { CreateSkillDto } from './dto/create-skill.dto';
-import { ToggleModuleDto } from './dto/toggle-module.dto';
 import { UpdateAcademicProfileDto } from './dto/update-academic-profile.dto';
 import { UpdatePersonalInfoDto } from './dto/update-personal-info.dto';
 import { UpdateProfessionalProfileDto } from './dto/update-professional-profile.dto';
@@ -190,33 +189,6 @@ export class ProfileController {
     );
   }
 
-  // ─── Modules ─────────────────────────────────────────
-
-  @Get('modules')
-  @ApiOperation({ summary: 'Obtener módulos del usuario' })
-  @ApiResponse({ status: 200, description: 'Módulos del usuario' })
-  getUserModules(@CurrentUser() user: { id: number }) {
-    return this.profileService.getUserModules(user.id);
-  }
-
-  @Post('modules')
-  @ApiOperation({ summary: 'Activar/desactivar un módulo' })
-  @ApiResponse({ status: 200, description: 'Estado del módulo actualizado' })
-  @ApiResponse({ status: 404, description: 'Módulo no encontrado' })
-  toggleModule(
-    @CurrentUser() user: { id: number },
-    @Body() dto: ToggleModuleDto,
-  ) {
-    return this.profileService.toggleModule(user.id, dto);
-  }
-
-  @Post('modules/defaults')
-  @ApiOperation({ summary: 'Activar módulos por defecto' })
-  @ApiResponse({ status: 200, description: 'Módulos por defecto activados' })
-  activateDefaultModules(@CurrentUser() user: { id: number }) {
-    return this.profileService.activateDefaultModules(user.id);
-  }
-
   // ─── Personal Info ──────────────────────────────────
 
   @Get('personal')
@@ -364,15 +336,3 @@ export class ObjectivesController {
   }
 }
 
-@ApiTags('Modules')
-@Controller('modules')
-export class AppModulesController {
-  constructor(private readonly profileService: ProfileService) {}
-
-  @Get()
-  @ApiOperation({ summary: 'Obtener todos los módulos disponibles' })
-  @ApiResponse({ status: 200, description: 'Todos los módulos disponibles' })
-  findAll() {
-    return this.profileService.findAllModules();
-  }
-}
