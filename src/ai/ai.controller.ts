@@ -11,6 +11,7 @@ import { CreateLearningGoalDto } from './dto/create-learning-goal.dto';
 import { UpdateLearningGoalDto } from './dto/update-learning-goal.dto';
 import { CreateTeacherProfileDto } from './dto/create-teacher-profile.dto';
 import { UpdateTeacherProfileDto } from './dto/update-teacher-profile.dto';
+import { GenerateQuizDto } from './dto/generate-quiz.dto';
 import { ObjectId } from 'mongodb';
 import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
@@ -84,6 +85,15 @@ export class AiController {
   async getDashboard(@Req() req: any) {
     const userId = req.user.id;
     return this.ai.getDashboard(userId);
+  }
+
+  @Post('resources/quiz')
+  @ApiOperation({ summary: 'Generar un quiz de práctica a demanda basado en brechas de conocimiento o tema indicado' })
+  @ApiBody({ type: GenerateQuizDto })
+  async generateQuiz(@Req() req: any, @Body() dto: GenerateQuizDto) {
+    const userId = req.user.id;
+    const resource = await this.ai.generateQuiz(userId, dto);
+    return { resource };
   }
 
   @Get('resources')

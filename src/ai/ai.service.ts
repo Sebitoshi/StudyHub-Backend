@@ -13,6 +13,7 @@ import { AdaptiveLearningService } from './adaptive/adaptive-learning.service';
 import { StudentModelService } from './student-models/student-model.service';
 import { GeneratedResourcesService } from './generated-resources/generated-resources.service';
 import { AdaptiveSessionsService } from './adaptive/adaptive-sessions.service';
+import { ResourceGeneratorService } from './adaptive/resource-generator.service';
 import { LearningGoalsService } from './learning-goals/learning-goals.service';
 
 @Injectable()
@@ -35,6 +36,7 @@ export class AiService {
     private readonly generatedResourcesService: GeneratedResourcesService,
     private readonly adaptiveSessionsService: AdaptiveSessionsService,
     private readonly learningGoalsService: LearningGoalsService,
+    private readonly resourceGenerator: ResourceGeneratorService,
   ) {}
 
   async ensureConversation(userId: number, conversationId?: string) {
@@ -365,6 +367,26 @@ export class AiService {
     } catch (err) {
       this.logger.warn('Failed to auto-generate title: ' + err);
     }
+  }
+
+  /**
+   * Genera un quiz de práctica a demanda (pestaña Quiz del Profesor IA).
+   * Usa el tema indicado o infiere uno de las brechas de conocimiento y de los
+   * temas recientes que el estudiante ha estado conversando con la IA.
+   */
+  async generateQuiz(userId: number, dto: { topic?: string; difficulty?: string; count?: number }) {
+    const [gaps, recentMessages] = await Promise.all([
+      this.knowledgeGapsService.getTopGaps(userId, 10).catch(() => []),
+      this.messages.find({ userId, role: 'user' }).sort({ createdAt: -1 }).limit(15).toArray().catch(() => []),
+    ]);
+    const recentTexts = (recentMessages || []).map((m) => m.content || '').filter(Boolean).reverse();
+    return this.resourceGenerator.generateQuizForUser(userId, null, {
+      topic: dto.topic,
+      difficulty: dto.difficulty,
+      count: dto.count,
+      knowledgeGaps: gaps || [],
+      recentUserMessages: recentTexts,
+    });
   }
 
   async getDashboard(userId: number) {

@@ -78,6 +78,9 @@ export class GeneratedResourcesService {
       generatedFrom: row.generatedFrom || null,
       completed: row.completed ?? false,
       completedAt: row.completedAt || null,
+      resultScore: row.resultScore ?? null,
+      resultCorrect: row.resultCorrect ?? null,
+      resultTotal: row.resultTotal ?? null,
       trigger: row.trigger || null,
       createdAt: row.createdAt,
     };

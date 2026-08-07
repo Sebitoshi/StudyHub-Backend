@@ -201,6 +201,70 @@ ${this.batchJsonSchema()}`,
 }`;
   }
 
+  /**
+   * Genera un quiz de práctica a demanda (pestaña Quiz del Profesor IA).
+   * El tema se toma de `options.topic` o se infiere de los knowledge gaps / mensajes
+   * recientes del estudiante. El contenido usa Markdown + LaTeX para que el frontend
+   * renderice negritas, fórmulas y superíndices (ej: $x^2$) igual que en el chat.
+   */
+  async generateQuizForUser(
+    userId: number,
+    conversationId: any,
+    options: {
+      topic?: string;
+      difficulty?: string;
+      count?: number;
+      knowledgeGaps?: any[];
+      recentUserMessages?: string[];
+    },
+  ) {
+    const gaps = options.knowledgeGaps || [];
+    const topic = (options.topic || '').trim() || this.pickQuizTopic(gaps, options.recentUserMessages || []);
+    const subject = this.inferSubject(topic, undefined, gaps) || 'general';
+    const difficulty = (options.difficulty || this.resolveDifficulty(subject) || 'INTERMEDIATE').toUpperCase();
+    const count = Math.min(15, Math.max(3, options.count || 8));
+
+    const contextBlock = this.buildQuizContextBlock(topic, subject, difficulty, gaps, options.recentUserMessages || []);
+
+    const { data } = await this.groq.chatJson([
+      {
+        role: 'system',
+        content: `Eres un profesor universitario que diseña quizzes de práctica en español.
+Responde SOLO con JSON válido, sin markdown de código ni texto adicional.
+Usa Markdown dentro de los campos de texto para formato (negritas con **texto**, itálicas, listas) y notación LaTeX entre $ $ para matemáticas (ej: $x^2$, $\\frac{1}{2}$, $\\sqrt{3}$). Esto permite que las fórmulas y superíndices se muestren correctamente en pantalla.`,
+      },
+      {
+        role: 'user',
+        content: `${contextBlock}
+
+TAREA: Genera un quiz de práctica de ${count} preguntas de opción múltiple sobre "${topic}" en ${subject}.
+Dificultad: ${difficulty}.
+Prioriza las brechas de conocimiento del estudiante.
+Varía tipos de pregunta: conceptual, aplicación, procedimiento y detección de errores.
+Cada pregunta debe tener exactamente 4 opciones, la respuesta correcta con el texto EXACTO de una de las opciones, y una explicación breve.
+
+Formato JSON exacto:
+${this.quizJsonSchema()}`,
+      },
+    ]);
+
+    const questions = Array.isArray(data.questions) ? data.questions.slice(0, count) : [];
+    const content = {
+      type: 'QUIZ',
+      topic,
+      subject,
+      quiz: questions,
+    };
+    const title = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : this.defaultTitle('QUIZ', topic);
+    const id = await this.generated.saveResource(userId, conversationId, 'QUIZ', title, content, {
+      subject,
+      trigger: 'QUIZ_TAB',
+      difficulty,
+      generatedFrom: { trigger: 'QUIZ_TAB', topic, subject },
+    });
+    return this.generated.getByIdForUser(userId, String(id));
+  }
+
   /** @deprecated Use generateAndPersistResources for real Groq content. */
   generateQuickResources(topic: string, level?: string) {
     return {
@@ -429,6 +493,45 @@ Prioriza gaps y debilidades del estudiante.`;
   private firstGapId(knowledgeGaps?: any[]) {
     const gap = (knowledgeGaps || [])[0];
     return gap?._id ? String(gap._id) : gap?.id ? String(gap.id) : null;
+  }
+
+  private quizJsonSchema(): string {
+    return `{
+  "title": "Título del quiz",
+  "questions": [
+    {
+      "question": "Pregunta con **negritas** y $x^2$ si aplica",
+      "choices": ["Opción A", "Opción B", "Opción C", "Opción D"],
+      "answer": "Texto exacto de la opción correcta",
+      "explanation": "Explicación breve con **negritas** o $fórmula$ si aplica",
+      "difficulty": "easy|medium|hard"
+    }
+  ]
+}`;
+  }
+
+  private pickQuizTopic(gaps: any[], recentMessages: string[]): string {
+    const active = (gaps || []).find((g) => ['DETECTED', 'IMPROVING'].includes(g.status)) || (gaps || [])[0];
+    if (active?.topic) return active.topic;
+    if (recentMessages?.length) {
+      const last = recentMessages[recentMessages.length - 1];
+      return last ? last.slice(0, 80) : 'conceptos fundamentales';
+    }
+    return 'conceptos fundamentales';
+  }
+
+  private buildQuizContextBlock(topic: string, subject: string, difficulty: string, gaps: any[], recentMessages: string[]) {
+    const gapLines = (gaps || []).slice(0, 6).map((g) => `- ${g.topic} (${g.subject || 'general'}, confianza: ${g.confidence ?? '?'}, estado: ${g.status || '?'})`);
+    const recentLines = (recentMessages || []).slice(-6).map((m) => `- ${String(m || '').slice(0, 140)}`);
+    return [
+      `TEMA: ${topic}`,
+      `MATERIA: ${subject}`,
+      `DIFICULTAD: ${difficulty}`,
+      `BRECHAS DE CONOCIMIENTO DETECTADAS:`,
+      gapLines.length ? gapLines.join('\n') : '- ninguna',
+      `MENSAJES RECIENTES DEL ESTUDIANTE (contexto de lo que ha estudiado):`,
+      recentLines.length ? recentLines.join('\n') : '- ninguno',
+    ].join('\n');
   }
 
   private defaultTitle(type: ResourceType, topic: string) {
