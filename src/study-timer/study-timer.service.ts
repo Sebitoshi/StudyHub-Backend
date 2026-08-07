@@ -101,4 +101,26 @@ export class StudyTimerService {
 
     return { totalHours };
   }
+
+  async getSessions(userId: number) {
+    // Sesiones más recientes primero (historial del usuario)
+    return this.prisma.studyTimerSession.findMany({
+      where: { userId },
+      orderBy: { completedAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        completedAt: true,
+        durationMinutes: true,
+        technique: true,
+        xpEarned: true,
+        subjectId: true,
+      },
+    });
+  }
+
+  async clearSessions(userId: number) {
+    await this.prisma.studyTimerSession.deleteMany({ where: { userId } });
+    return { success: true };
+  }
 }

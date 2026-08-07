@@ -558,6 +558,8 @@ Redirige a: `${FRONTEND_URL}/auth/callback?token=...&user=...`
 |--------|------|-------------|
 | POST | `/study-timer/session` | Registrar sesión de estudio |
 | GET | `/study-timer/stats` | Estadísticas semanales |
+| GET | `/study-timer/sessions` | Historial de sesiones (más recientes primero, máx. 100) |
+| DELETE | `/study-timer/sessions` | Limpiar el historial de sesiones |
 
 ```json
 // POST /study-timer/session — Request
@@ -574,6 +576,21 @@ Redirige a: `${FRONTEND_URL}/auth/callback?token=...&user=...`
   ],
   "totalMinutes": 540
 }
+
+// GET /study-timer/sessions — Response 200
+[
+  {
+    "id": 3,
+    "completedAt": "2026-08-07T14:30:00.000Z",
+    "durationMinutes": 25,
+    "technique": "POMODORO_25_5",
+    "xpEarned": 10,
+    "subjectId": 1
+  }
+]
+
+// DELETE /study-timer/sessions — Response 200
+{ "success": true }
 ```
 
 ---
