@@ -12,6 +12,7 @@
     "start:dev": "NODE_TLS_REJECT_UNAUTHORIZED=0 nest start --watch",
     "start:debug": "NODE_TLS_REJECT_UNAUTHORIZED=0 nest start --debug --watch",
     "start:prod": "node dist/main",
+    "purge:roadmap-templates": "tsx src/roadmaps/purge-corrupt-templates.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

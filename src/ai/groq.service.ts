@@ -74,9 +74,12 @@ export class GroqService {
    * Request structured JSON from the model. Parses response and returns the parsed object.
    *
    * Robustez:
-   * - Pide JSON mode (response_format json_object) y un max_tokens amplio para evitar
-   *   respuestas truncadas.
+   * - Pide JSON mode (response_format json_object) y un max_tokens acotado al límite
+   *   de tokens por minuto (TPM) del plan (GROQ_MAX_TOKENS, default 6000): el tier
+   *   gratuito de Groq rechaza con 413 si input + max_tokens supera el TPM (8000 en
+   *   openai/gpt-oss-120b).
    * - Si el modelo no soporta JSON mode, reintenta sin él.
+   * - Si el error es de límite de tokens/TPM, reduce max_tokens y reintenta.
    * - Reintenta hasta 3 veces (la salida del LLM no es determinista) reparando el JSON
    *   en cada intento.
    */
@@ -85,7 +88,9 @@ export class GroqService {
   ): Promise<{ data: any; tokensUsed?: number; model?: string }> {
     const maxAttempts = 3;
     let jsonMode = true;
-    let maxTokens = 32768;
+    // Default 6000 (cabe en el TPM 8000 del tier gratuito dejando margen para el input).
+    // Techo de 7500 para que un valor alto en el env no reproduzca el 413.
+    let maxTokens = Math.min(Number(process.env.GROQ_MAX_TOKENS) || 6000, 7500);
     let lastError: any;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -105,7 +110,7 @@ export class GroqService {
             message,
           );
         const tokenLimitExceeded =
-          /max_tokens|maximum.{0,20}(token|context)|exceeds.{0,20}limit/i.test(
+          /max_tokens|maximum.{0,20}(token|context)|exceeds.{0,20}limit|tokens per minute|\bTPM\b|rate_limit|request too large|reduce your message/i.test(
             message,
           );
 
@@ -114,12 +119,14 @@ export class GroqService {
             `Model ${this.model} does not support JSON mode; retrying without it.`,
           );
           jsonMode = false;
-        } else if (tokenLimitExceeded && maxTokens > 8192) {
-          // El modelo tiene un límite de salida menor: reducir max_tokens y reintentar
-          maxTokens = Math.floor(maxTokens / 2);
+        } else if (tokenLimitExceeded && maxTokens > 1024) {
+          // Límite de tokens/TPM alcanzado (ej. 413): recortar max_tokens y reintentar
+          maxTokens = Math.max(1024, maxTokens - 2048);
           this.logger.warn(
-            `max_tokens limit reached; retrying with maxTokens=${maxTokens}.`,
+            `Token/TPM limit reached; retrying with maxTokens=${maxTokens}.`,
           );
+          // Los límites TPM se miden por ventana de 1 minuto: dar tiempo entre intentos
+          await new Promise((r) => setTimeout(r, 1000));
         } else if (jsonMode && attempt >= 2) {
           // Si dos intentos con JSON mode fallaron por cualquier motivo, probar sin él
           this.logger.warn(
