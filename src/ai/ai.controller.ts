@@ -59,7 +59,7 @@ export class AiController {
     });
 
     try {
-      await this.ai.streamChat(userId, dto.conversationId, dto.message, dto.teacherId, async (chunk: string) => {
+      const result = await this.ai.streamChat(userId, dto.conversationId, dto.message, dto.teacherId, async (chunk: string) => {
         if (closed) return;
         const payload = chunk.replace(/\n/g, '\n');
         res.write(`event: message\ndata: ${payload}\n\n`);
@@ -67,7 +67,7 @@ export class AiController {
       });
 
       if (!closed) {
-        res.write('event: done\ndata: true\n\n');
+        res.write(`event: done\ndata: ${JSON.stringify({ conversationId: String(result?.conversationId || '') })}\n\n`);
         res.end();
       }
     } catch (err) {
