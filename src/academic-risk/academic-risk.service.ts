@@ -52,13 +52,6 @@ export class AcademicRiskService {
         factors: result.factors,
       },
       recommendations: recs,
-      details: {
-        gapScore: result.gapScore,
-        overdueScore: result.overdueScore,
-        confidenceScore: result.confidenceScore,
-        roadmapScore: result.roadmapScore,
-        engagementScore: result.engagementScore,
-      },
     };
   }
 
