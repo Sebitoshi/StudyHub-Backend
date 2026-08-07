@@ -1,7 +1,39 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, IsArray } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsArray,
+  IsBoolean,
+} from 'class-validator';
 
 export class GenerateRoadmapDto {
+  @ApiProperty({
+    required: false,
+    description:
+      'Tema a aprender (ej: "Inglés", "Cálculo", "Programación"). Si se envía, se usa el flujo de ruta por tema (estilo Duolingo).',
+  })
+  @IsOptional()
+  @IsString()
+  topic?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Objetivo o contexto del aprendizaje (ej: "para conversar")',
+  })
+  @IsOptional()
+  @IsString()
+  goal?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Regenerar la ruta del tema con IA aunque ya exista una plantilla guardada',
+  })
+  @IsOptional()
+  @IsBoolean()
+  regenerate?: boolean;
+
   @ApiProperty({
     required: false,
     description: 'ID de la vacante (para sacar missing skills del caché)',

@@ -663,12 +663,21 @@ model Roadmap {
   generatedByAi  Boolean @default(true)
   aiPrompt       Json?
 
-  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  steps RoadmapStep[]
+  // Ruta por tema (tipo Duolingo): el usuario pide aprender un tema
+  topic            String?
+  sourceTemplateId Int?
+  totalLevels      Int             @default(1)
+  currentLevel     Int             @default(1)
+  levelsMeta       Json? // Título y descripción de cada nivel
+
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps          RoadmapStep[]
+  sourceTemplate RoadmapTemplate? @relation(fields: [sourceTemplateId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([userId])
   @@map("roadmaps")
 }
 
@@ -682,10 +691,34 @@ model RoadmapStep {
   skillCategory  String?
   estimatedHours Float?
   completed      Boolean @default(false)
+  level          Int     @default(1)
+  practice       Json? // Preguntas de práctica (quiz) de la lección
 
   roadmap Roadmap @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
 
+  @@index([roadmapId])
   @@map("roadmap_steps")
+}
+
+// Plantilla compartida por tema: si otro usuario pide lo mismo, se reutiliza
+model RoadmapTemplate {
+  id             Int      @id @default(autoincrement())
+  topic          String
+  topicSlug      String   @unique
+  title          String
+  description    String?
+  category       String?
+  difficulty     String?
+  estimatedHours Float?
+  totalLevels    Int      @default(1)
+  data           Json
+  usedCount      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  userRoadmaps Roadmap[]
+
+  @@map("roadmap_templates")
 }
 
 model ResumeAnalysis {

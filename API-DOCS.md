@@ -425,26 +425,41 @@ Redirige a: `${FRONTEND_URL}/auth/callback?token=...&user=...`
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| POST | `/roadmaps/generate` | Generar roadmap con IA |
+| POST | `/roadmaps/generate` | Generar roadmap con IA (por tema con niveles Duolingo, o desde empleo) |
 | GET | `/roadmaps` | Listar roadmaps |
 | GET | `/roadmaps/:id` | Detalle de roadmap + pasos |
 | PATCH | `/roadmaps/steps/:stepId/complete` | Marcar paso como completado |
 | DELETE | `/roadmaps/:id` | Eliminar roadmap |
 
 ```json
-// POST /roadmaps/generate — Request
-{ "jobId": 1, "targetRole": "Frontend Developer", "missingSkills": ["React", "GraphQL"] }
+// POST /roadmaps/generate — Request (flujo por tema, estilo Duolingo)
+{ "topic": "Inglés", "goal": "para conversar en viajes", "regenerate": false }
 
 // Response 201
 {
   "id": 1,
-  "title": "Frontend Developer",
-  "description": "Roadmap para convertirte en Frontend Developer",
+  "topic": "Inglés",
+  "totalLevels": 6,
+  "currentLevel": 1,
+  "title": "Aprender Inglés",
+  "description": "Plan para dominar el inglés conversacional",
   "steps": [
-    { "id": 1, "title": "Aprende React", "skill": "React", "completed": false, "order": 1 },
-    { "id": 2, "title": "Domina GraphQL", "skill": "GraphQL", "completed": false, "order": 2 }
+    {
+      "id": 1,
+      "title": "Saludos y presentaciones",
+      "skill": "Vocabulario",
+      "level": 1,
+      "completed": false,
+      "order": 1,
+      "practice": [
+        { "question": "¿Cómo se dice 'hola' en inglés?", "options": ["Hola", "Hello", "Adiós", "Gracias"], "correctIndex": 1, "explanation": "Hello es el saludo estándar." }
+      ]
+    }
   ]
 }
+
+// POST /roadmaps/generate — Request (flujo legado desde empleo)
+{ "jobId": 1, "targetRole": "Frontend Developer", "missingSkills": ["React", "GraphQL"] }
 ```
 
 ---
