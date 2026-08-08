@@ -210,7 +210,8 @@ Reglas:
 - Entre 3 y 5 lecciones por nivel.
 - Cada lección incluye entre 2 y 3 preguntas de opción múltiple en "practice" (siempre 4 opciones, "correctIndex" es el índice 0-3 de la correcta, y una "explanation" breve).
 - Todo el contenido (descripciones, preguntas y explicaciones) debe estar en español, salvo el material propio del tema (ej. el vocabulario en inglés si el tema es inglés).
-- Dificultad creciente nivel a nivel.`;
+- Dificultad creciente nivel a nivel.
+- Notación matemática: toda fórmula o símbolo matemático (fracciones, raíces, potencias, intervalos, uniones) debe ir SIEMPRE entre $...$, tanto en preguntas como en CADA opción y en las explicaciones. Ejemplo correcto: "$x^2$ y $(-\\infty, 2) \\cup (2, \\infty)$". Nunca dejes LaTeX ni símbolos sueltos sin los $.`;
   }
 
   private normalizeSlug(text: string): string {

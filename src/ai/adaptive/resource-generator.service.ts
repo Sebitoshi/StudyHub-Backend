@@ -145,7 +145,8 @@ export class ResourceGeneratorService {
         role: 'system',
         content: `Eres un diseñador instruccional universitario. Genera recursos académicos personalizados en español.
 Responde SOLO con JSON válido, sin markdown ni texto adicional.
-Debes devolver TODOS los recursos en una sola respuesta.`,
+Debes devolver TODOS los recursos en una sola respuesta.
+Notación matemática: toda fórmula o símbolo matemático debe ir SIEMPRE entre $...$ (ej: $x^2$, $\\frac{1}{2}$, $(-\\infty, 2) \\cup (2, \\infty)$), tanto en las preguntas como en CADA opción de los quizzes y en las explicaciones.`,
       },
       {
         role: 'user',
@@ -231,7 +232,14 @@ ${this.batchJsonSchema()}`,
         role: 'system',
         content: `Eres un profesor universitario que diseña quizzes de práctica en español.
 Responde SOLO con JSON válido, sin markdown de código ni texto adicional.
-Usa Markdown dentro de los campos de texto para formato (negritas con **texto**, itálicas, listas) y notación LaTeX entre $ $ para matemáticas (ej: $x^2$, $\\frac{1}{2}$, $\\sqrt{3}$). Esto permite que las fórmulas y superíndices se muestren correctamente en pantalla.`,
+Usa Markdown dentro de los campos de texto para formato (negritas con **texto**, itálicas, listas) y notación LaTeX para matemáticas.
+
+REGLAS OBLIGATORIAS DE NOTACIÓN MATEMÁTICA:
+- Toda expresión matemática debe ir SIEMPRE entre $...$ (en línea) o $$...$$ (en bloque). Aplica a la pregunta, a CADA UNA de las opciones y a la explicación. Nunca dejes LaTeX ni símbolos matemáticos "desnudos" sin los $.
+- Correcto: $(-\\infty, 2) \\cup (2, \\infty)$, $\\mathbb{R} \\setminus \\{2\\}$, $x \\neq 0$, $f(x) = \\dfrac{1}{x-2}$.
+- Incorrecto (PROHIBIDO): (-\\infty, 2) ∪ (2, ∞) o \\mathbb{R} sin los $.
+- Si una opción mezcla texto y fórmula, envuelve solo la fórmula: "Todos los reales excepto $x = 2$".
+- Usa comandos LaTeX (\\infty, \\mathbb{R}, \\cup, \\geq, \\neq, \\frac{a}{b}) en lugar de caracteres sueltos o texto plano.`,
       },
       {
         role: 'user',
@@ -298,7 +306,8 @@ ${this.quizJsonSchema()}`,
         role: 'system',
         content: `Eres un diseñador instruccional universitario. Genera recursos académicos personalizados en español.
 Responde SOLO con JSON válido, sin markdown ni texto adicional.
-El contenido debe ser específico para la materia y el nivel del estudiante, no genérico.`,
+El contenido debe ser específico para la materia y el nivel del estudiante, no genérico.
+Notación matemática: toda fórmula o símbolo matemático debe ir SIEMPRE entre $...$ (ej: $x^2$, $\\frac{1}{2}$), incluida CADA opción de los quizzes.`,
       },
       {
         role: 'user',
@@ -501,8 +510,8 @@ Prioriza gaps y debilidades del estudiante.`;
   "questions": [
     {
       "question": "Pregunta con **negritas** y $x^2$ si aplica",
-      "choices": ["Opción A", "Opción B", "Opción C", "Opción D"],
-      "answer": "Texto exacto de la opción correcta",
+      "choices": ["$(-\\infty, 2) \\cup (2, \\infty)$", "Opción B", "Opción C", "Opción D"],
+      "answer": "$(-\\infty, 2) \\cup (2, \\infty)$",
       "explanation": "Explicación breve con **negritas** o $fórmula$ si aplica",
       "difficulty": "easy|medium|hard"
     }
