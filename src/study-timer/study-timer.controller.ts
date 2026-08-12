@@ -1,8 +1,27 @@
-import { Controller, Post, Get, Delete, Body, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Delete,
+  Body,
+  UseGuards,
+  Request,
+  Query,
+  DefaultValuePipe,
+  ParseIntPipe,
+  ParseEnumPipe,
+} from '@nestjs/common';
 import { StudyTimerService } from './study-timer.service';
 import { CreateStudySessionDto } from './dto/create-study-session.dto';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+
+export enum StudySessionPeriod {
+  DAY = 'day',
+  WEEK = 'week',
+  MONTH = 'month',
+  ALL = 'all',
+}
 
 @ApiTags('Study Timer')
 @ApiBearerAuth()
@@ -24,9 +43,18 @@ export class StudyTimerController {
   }
 
   @Get('sessions')
-  @ApiOperation({ summary: 'Get the study session history for the current user' })
-  getSessions(@Request() req: any) {
-    return this.studyTimerService.getSessions(req.user.id);
+  @ApiOperation({ summary: 'Historial de sesiones, filtrable por día/semana/mes y paginado' })
+  @ApiQuery({ name: 'period', enum: StudySessionPeriod, required: false, description: 'day | week | month | all' })
+  @ApiQuery({ name: 'page', required: false, description: 'Página (1-based)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Sesiones por página (máx 50)' })
+  getSessions(
+    @Request() req: any,
+    @Query('period', new DefaultValuePipe(StudySessionPeriod.ALL), new ParseEnumPipe(StudySessionPeriod))
+    period: StudySessionPeriod,
+    @Query('page', new DefaultValuePipe(1), new ParseIntPipe({ optional: true })) page: number,
+    @Query('limit', new DefaultValuePipe(20), new ParseIntPipe({ optional: true })) limit: number,
+  ) {
+    return this.studyTimerService.getSessions(req.user.id, period, page, limit);
   }
 
   @Delete('sessions')

@@ -103,21 +103,50 @@ export class StudyTimerService {
     return { totalHours };
   }
 
-  async getSessions(userId: number) {
-    // Sesiones más recientes primero (historial del usuario)
-    return this.prisma.studyTimerSession.findMany({
-      where: { userId },
-      orderBy: { completedAt: 'desc' },
-      take: 100,
-      select: {
-        id: true,
-        completedAt: true,
-        durationMinutes: true,
-        technique: true,
-        xpEarned: true,
-        subjectId: true,
-      },
-    });
+  async getSessions(
+    userId: number,
+    period: string = 'all',
+    page: number = 1,
+    limit: number = 20,
+  ) {
+    // Sesiones más recientes primero; filtro opcional por día/semana/mes y paginación
+    const safeLimit = Math.min(Math.max(limit || 20, 1), 50);
+    const safePage = Math.max(page || 1, 1);
+
+    const where: any = { userId };
+    if (period && period !== 'all') {
+      const now = new Date();
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      if (period === 'day') {
+        // Hoy desde las 00:00
+      } else if (period === 'week') {
+        start.setDate(now.getDate() - now.getDay()); // Domingo como inicio de semana
+      } else if (period === 'month') {
+        start.setDate(1);
+      }
+      where.completedAt = { gte: start };
+    }
+
+    const [sessions, total] = await this.prisma.$transaction([
+      this.prisma.studyTimerSession.findMany({
+        where,
+        orderBy: { completedAt: 'desc' },
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+        select: {
+          id: true,
+          completedAt: true,
+          durationMinutes: true,
+          technique: true,
+          xpEarned: true,
+          subjectId: true,
+        },
+      }),
+      this.prisma.studyTimerSession.count({ where }),
+    ]);
+
+    return { sessions, total, page: safePage, limit: safeLimit };
   }
 
   async clearSessions(userId: number) {
