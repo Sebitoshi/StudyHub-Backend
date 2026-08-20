@@ -23,5 +23,6 @@ export class ExplainAnswerDto {
   topic?: string = '';
 
   @ApiProperty({ description: 'El usuario acertó o no', example: true })
-  isCorrect: boolean;
+  @IsOptional()
+  isCorrect?: boolean;
 }

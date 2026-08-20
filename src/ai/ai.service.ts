@@ -447,7 +447,7 @@ export class AiService {
     choices: string[];
     correctAnswer: string;
     topic?: string;
-    isCorrect: boolean;
+    isCorrect?: boolean;
   }): Promise<{ explanation: string }> {
     const prompt = `Eres un profesor universitario explicando un examen a un estudiante.
 
