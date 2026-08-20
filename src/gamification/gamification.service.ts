@@ -36,6 +36,9 @@ export class GamificationService {
   constructor(private prisma: PrismaService) {}
 
   async getProgress(userId: number) {
+    // Always recalculate streak when fetching dashboard
+    await this.updateStreak(userId);
+
     let progress = await this.prisma.userProgress.findUnique({
       where: { userId },
     });
