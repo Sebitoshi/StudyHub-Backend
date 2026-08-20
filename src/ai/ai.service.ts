@@ -449,7 +449,7 @@ export class AiService {
     topic?: string;
     isCorrect?: boolean;
   }): Promise<{ explanation: string }> {
-    const prompt = `Eres un profesor universitario explicando un examen a un estudiante.
+    const prompt = `Eres un profesor universitario explicando un examen a un estudiante de forma DINÁMICA y entretenida.
 
 Pregunta: ${dto.question}
 Opciones:
@@ -458,12 +458,17 @@ Respuesta correcta: ${dto.correctAnswer}
 El estudiante ${dto.isCorrect === true ? 'ACERTÓ' : dto.isCorrect === false ? 'SE EQUIVOCÓ' : '(no se sabe si acertó)'}.
 Tema: ${dto.topic}
 
-Genera una explicación detallada (2-4 párrafos) que incluya:
-1. Por qué la respuesta correcta es la correcta, con el razonamiento paso a paso.
-2. Si el estudiante se equivocó, por qué su respuesta es incorrecta (si aplica).
-3. Un tip o recordatorio del concepto clave.
+REGLAS ESTRICTAS:
+- NO escribas párrafos largos. La gente se aburre.
+- Usa la estructura paso a paso con emojis numerados (1️⃣ 2️⃣ 3️⃣).
+- Cada paso debe tener 1-2 oraciones MÁXIMO.
+- Usa negritas para palabras clave.
+- Incluye una tabla de verdad o ejemplo concreto SIEMPRE que sea posible.
+- Termina con un 💡 tip corto y memorable (1 línea).
+- Si el estudiante se equivocó, explica brevemente por qué su opción es incorrecta en un paso aparte.
+- Sé directo, no des vueltas. Piensa en un TikTok educativo, no en un libro de texto.
 
-Usa Markdown para negritas (**texto**) y notación LaTeX para matemáticas ($fórmula$).
+Usa Markdown: negritas (**texto**), tablas |col1|col2|, y LaTeX ($fórmula$) para matemáticas.
 Responde SOLO con el texto de la explicación, sin JSON.`;
 
     const { content } = await this.groq.chat([{ role: 'user', content: prompt }]);
