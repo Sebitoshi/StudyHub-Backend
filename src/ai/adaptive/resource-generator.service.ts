@@ -250,6 +250,7 @@ Dificultad: ${difficulty}.
 Prioriza las brechas de conocimiento del estudiante.
 Varía tipos de pregunta: conceptual, aplicación, procedimiento y detección de errores.
 Cada pregunta debe tener exactamente 4 opciones, la respuesta correcta con el texto EXACTO de una de las opciones, y una explicación breve.
+IMPORTANTE: La respuesta correcta NO siempre debe ser la primera opción (A). Distribuye las respuestas correctas entre las posiciones A, B, C y D de forma variada para que el estudiante deba leer todas las opciones.
 
 Formato JSON exacto:
 ${this.quizJsonSchema()}`,

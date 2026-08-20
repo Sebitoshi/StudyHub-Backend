@@ -12,6 +12,7 @@ import { UpdateLearningGoalDto } from './dto/update-learning-goal.dto';
 import { CreateTeacherProfileDto } from './dto/create-teacher-profile.dto';
 import { UpdateTeacherProfileDto } from './dto/update-teacher-profile.dto';
 import { GenerateQuizDto } from './dto/generate-quiz.dto';
+import { ExplainAnswerDto } from './dto/explain-answer.dto';
 import { ObjectId } from 'mongodb';
 import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
@@ -312,5 +313,13 @@ export class AiController {
     const userId = req.user.id;
     const gap = await this.knowledgeGaps.patch(id, body);
     return { gap };
+  }
+
+  @Post('explain-answer')
+  @ApiOperation({ summary: 'Genera una explicación detallada de la respuesta correcta de un quiz' })
+  @ApiBody({ type: ExplainAnswerDto })
+  async explainAnswer(@Body() dto: ExplainAnswerDto) {
+    const result = await this.ai.explainAnswer(dto);
+    return result;
   }
 }

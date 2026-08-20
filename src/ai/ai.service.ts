@@ -437,4 +437,36 @@ export class AiService {
       },
     };
   }
+
+  /**
+   * Genera una explicación detallada de por qué la respuesta correcta es correcta.
+   * Se usa cuando el estudiante hace clic en "¿Por qué?" después de responder una pregunta.
+   */
+  async explainAnswer(dto: {
+    question: string;
+    choices: string[];
+    correctAnswer: string;
+    topic: string;
+    isCorrect: boolean;
+  }): Promise<{ explanation: string }> {
+    const prompt = `Eres un profesor universitario explicando un examen a un estudiante.
+
+Pregunta: ${dto.question}
+Opciones:
+${dto.choices.map((c, i) => `${String.fromCharCode(65 + i)}) ${c}`).join('\n')}
+Respuesta correcta: ${dto.correctAnswer}
+El estudiante ${dto.isCorrect ? 'ACERTÓ' : 'SE EQUIVOCÓ'}.
+Tema: ${dto.topic}
+
+Genera una explicación detallada (2-4 párrafos) que incluya:
+1. Por qué la respuesta correcta es la correcta, con el razonamiento paso a paso.
+2. Si el estudiante se equivocó, por qué su respuesta es incorrecta (si aplica).
+3. Un tip o recordatorio del concepto clave.
+
+Usa Markdown para negritas (**texto**) y notación LaTeX para matemáticas ($fórmula$).
+Responde SOLO con el texto de la explicación, sin JSON.`;
+
+    const { content } = await this.groq.chat([{ role: 'user', content: prompt }]);
+    return { explanation: content };
+  }
 }
