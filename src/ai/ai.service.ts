@@ -455,7 +455,7 @@ Pregunta: ${dto.question}
 Opciones:
 ${dto.choices.map((c, i) => `${String.fromCharCode(65 + i)}) ${c}`).join('\n')}
 Respuesta correcta: ${dto.correctAnswer}
-El estudiante ${dto.isCorrect ? 'ACERTÓ' : 'SE EQUIVOCÓ'}.
+El estudiante ${dto.isCorrect === true ? 'ACERTÓ' : dto.isCorrect === false ? 'SE EQUIVOCÓ' : '(no se sabe si acertó)'}.
 Tema: ${dto.topic}
 
 Genera una explicación detallada (2-4 párrafos) que incluya:
