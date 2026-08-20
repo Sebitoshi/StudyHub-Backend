@@ -36,9 +36,6 @@ export class GamificationService {
   constructor(private prisma: PrismaService) {}
 
   async getProgress(userId: number) {
-    // Always recalculate streak when fetching dashboard
-    await this.updateStreak(userId);
-
     let progress = await this.prisma.userProgress.findUnique({
       where: { userId },
     });
@@ -53,6 +50,9 @@ export class GamificationService {
       where: { userId },
     });
 
+    // Compute effective streak based on last activity date
+    const effectiveStreak = this.computeEffectiveStreak(streak);
+
     const achievements = await this.prisma.userAchievement.findMany({
       where: { userId },
       include: { achievement: true },
@@ -64,7 +64,7 @@ export class GamificationService {
       xp: progress.xp,
       totalXp: progress.totalXp,
       xpForNextLevel: xpForNextLevel(progress.level),
-      streak: streak?.currentStreak ?? 0,
+      streak: effectiveStreak,
       bestStreak: streak?.bestStreak ?? 0,
       achievements: achievements.length,
       achievementsList: achievements.map((ua) => ({
@@ -148,6 +148,25 @@ export class GamificationService {
     });
 
     return this.getProgress(userId);
+  }
+
+  /**
+   * Calculates the effective streak WITHOUT writing to DB.
+   * If the user hasn't been active today or yesterday, streak = 0.
+   */
+  private computeEffectiveStreak(streak: { currentStreak: number; lastActivityAt: Date | null } | null): number {
+    if (!streak?.lastActivityAt) return 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const lastActive = new Date(streak.lastActivityAt);
+    lastActive.setHours(0, 0, 0, 0);
+    const diffDays = Math.round(
+      (today.getTime() - lastActive.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    // Active today or yesterday → streak is valid
+    if (diffDays <= 1) return streak.currentStreak;
+    // Gap of 2+ days → streak is broken
+    return 0;
   }
 
   async updateStreak(userId: number) {
