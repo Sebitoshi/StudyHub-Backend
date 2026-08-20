@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsString, IsNotEmpty } from 'class-validator';
+import { IsArray, IsString, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class ExplainAnswerDto {
   @ApiProperty({ description: 'Pregunta del quiz', example: '¿Cuál es la integral de $x^2$?' })
@@ -19,8 +19,8 @@ export class ExplainAnswerDto {
 
   @ApiProperty({ description: 'Tema o materia del quiz', example: 'Cálculo integral' })
   @IsString()
-  @IsNotEmpty()
-  topic: string;
+  @IsOptional()
+  topic?: string = '';
 
   @ApiProperty({ description: 'El usuario acertó o no', example: true })
   isCorrect: boolean;
