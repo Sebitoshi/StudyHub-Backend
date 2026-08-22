@@ -56,10 +56,7 @@ export class DashboardService {
     const upcomingClasses = subjects
       .flatMap((s) =>
         s.schedules
-          .filter((sch) => {
-            if (sch.dayOfWeek !== nowDay) return false;
-            return sch.startTime >= currentTime;
-          })
+          .filter((sch) => sch.dayOfWeek === nowDay)
           .map((sch) => ({
             subjectId: s.id,
             subject: s.nombre,
