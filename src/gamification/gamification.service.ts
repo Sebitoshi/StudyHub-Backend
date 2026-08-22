@@ -59,9 +59,11 @@ export class GamificationService {
       orderBy: { unlockedAt: 'desc' },
     });
 
+    // xp dentro del nivel actual = totalXp - umbral del nivel anterior
+    const xpInLevel = progress.totalXp - (LEVEL_THRESHOLDS[progress.level - 1] ?? 0);
     return {
       level: progress.level,
-      xp: progress.xp,
+      xp: xpInLevel,
       totalXp: progress.totalXp,
       xpForNextLevel: xpForNextLevel(progress.level),
       streak: effectiveStreak,
