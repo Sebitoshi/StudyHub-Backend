@@ -11,7 +11,7 @@ const XP_VALUES: Record<string, number> = {
   ACHIEVEMENT_UNLOCK: 0,
 } as const;
 
-const LEVEL_THRESHOLDS = [0, 100, 250, 500, 800, 1200, 1700, 2300, 3000, 4000];
+export const LEVEL_THRESHOLDS = [0, 100, 250, 500, 800, 1200, 1700, 2300, 3000, 4000];
 
 export function calculateLevel(totalXp: number): number {
   let level = 1;
@@ -88,23 +88,16 @@ export class GamificationService {
     action: XpActionType,
     metadata?: Record<string, unknown>,
   ) {
-    const progress = await this.prisma.userProgress.upsert({
+    const existing = await this.prisma.userProgress.findUnique({ where: { userId } });
+    const newTotalXp = (existing?.totalXp ?? 0) + amount;
+    const newLevel = calculateLevel(newTotalXp);
+    const xpInLevel = newTotalXp - (LEVEL_THRESHOLDS[newLevel - 1] ?? 0);
+
+    await this.prisma.userProgress.upsert({
       where: { userId },
-      create: { userId, xp: amount, totalXp: amount },
-      update: {
-        xp: { increment: amount },
-        totalXp: { increment: amount },
-      },
+      create: { userId, xp: xpInLevel, totalXp: newTotalXp, level: newLevel },
+      update: { xp: xpInLevel, totalXp: newTotalXp, level: newLevel },
     });
-
-    const newLevel = calculateLevel(progress.totalXp + amount);
-
-    if (newLevel > progress.level) {
-      await this.prisma.userProgress.update({
-        where: { userId },
-        data: { level: newLevel },
-      });
-    }
 
     await this.prisma.xpHistory.create({
       data: { userId, amount, action, metadata: metadata as any },
@@ -122,23 +115,16 @@ export class GamificationService {
     amount: number,
     achievementNombre: string,
   ) {
-    const progress = await this.prisma.userProgress.upsert({
+    const existing = await this.prisma.userProgress.findUnique({ where: { userId } });
+    const newTotalXp = (existing?.totalXp ?? 0) + amount;
+    const newLevel = calculateLevel(newTotalXp);
+    const xpInLevel = newTotalXp - (LEVEL_THRESHOLDS[newLevel - 1] ?? 0);
+
+    await this.prisma.userProgress.upsert({
       where: { userId },
-      create: { userId, xp: amount, totalXp: amount },
-      update: {
-        xp: { increment: amount },
-        totalXp: { increment: amount },
-      },
+      create: { userId, xp: xpInLevel, totalXp: newTotalXp, level: newLevel },
+      update: { xp: xpInLevel, totalXp: newTotalXp, level: newLevel },
     });
-
-    const newLevel = calculateLevel(progress.totalXp + amount);
-
-    if (newLevel > progress.level) {
-      await this.prisma.userProgress.update({
-        where: { userId },
-        data: { level: newLevel },
-      });
-    }
 
     await this.prisma.xpHistory.create({
       data: {

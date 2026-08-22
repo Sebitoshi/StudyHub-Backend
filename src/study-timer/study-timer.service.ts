@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudySessionDto } from './dto/create-study-session.dto';
 import { XpActionType } from '@prisma/client';
-import { calculateLevel } from '../gamification/gamification.service';
+import { calculateLevel, LEVEL_THRESHOLDS } from '../gamification/gamification.service';
 
 @Injectable()
 export class StudyTimerService {
@@ -50,15 +50,14 @@ export class StudyTimerService {
       // Update User Progress
       const progress = await tx.userProgress.findUnique({ where: { userId } });
       if (progress) {
-        const newXp = progress.xp + xpEarned;
         const newTotalXp = progress.totalXp + xpEarned;
-        // Misma fórmula de niveles que GamificationService (LEVEL_THRESHOLDS)
         const newLevel = calculateLevel(newTotalXp);
+        const xpInLevel = newTotalXp - (LEVEL_THRESHOLDS[newLevel - 1] ?? 0);
 
         await tx.userProgress.update({
           where: { userId },
           data: {
-            xp: newXp % 100, // XP towards next level
+            xp: xpInLevel,
             totalXp: newTotalXp,
             level: newLevel,
           },
