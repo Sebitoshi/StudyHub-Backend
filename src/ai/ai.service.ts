@@ -374,7 +374,7 @@ export class AiService {
    * Usa el tema indicado o infiere uno de las brechas de conocimiento y de los
    * temas recientes que el estudiante ha estado conversando con la IA.
    */
-  async generateQuiz(userId: number, dto: { topic?: string; difficulty?: string; count?: number }) {
+  async generateQuiz(userId: number, dto: { topic?: string; difficulty?: string; count?: number; origin?: string }) {
     const [gaps, recentMessages] = await Promise.all([
       this.knowledgeGapsService.getTopGaps(userId, 10).catch(() => []),
       this.messages.find({ userId, role: 'user' }).sort({ createdAt: -1 }).limit(15).toArray().catch(() => []),
@@ -384,6 +384,7 @@ export class AiService {
       topic: dto.topic,
       difficulty: dto.difficulty,
       count: dto.count,
+      origin: dto.origin,
       knowledgeGaps: gaps || [],
       recentUserMessages: recentTexts,
     });

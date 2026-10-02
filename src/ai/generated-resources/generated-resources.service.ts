@@ -1,6 +1,9 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { GeneratedResourcesRepository } from './generated-resources.repository';
 
+/** Trigger con el que se marcan los recursos creados desde la zona de Simulacro. */
+export const SIMULACRO_TRIGGER = 'SIMULACRO_TAB';
+
 @Injectable()
 export class GeneratedResourcesService {
   constructor(private readonly repo: GeneratedResourcesRepository) {}
@@ -29,12 +32,24 @@ export class GeneratedResourcesService {
     return this.repo.findByUser(userId);
   }
 
-  async listResourcesForUser(userId: number, type?: string) {
+  async listResourcesForUser(userId: number, type?: string, scope?: string) {
     const rows = await this.repo.findByUser(userId);
-    const filtered = type
+    const filteredByType = type
       ? rows.filter((row) => String(row.type || row.resourceType).toUpperCase() === type.toUpperCase())
       : rows;
-    return filtered.map((row) => this.serialize(row, false));
+    return this.filterByScope(filteredByType, scope).map((row) => this.serialize(row, false));
+  }
+
+  /**
+   * `scope` separa las dos zonas del Profesor IA: `simulacro` devuelve solo los
+   * recursos del examen cronometrado y `quiz` todo lo demás (así los simulacros
+   * no se mezclan con los quizzes). Sin `scope` se devuelve todo.
+   */
+  private filterByScope(rows: any[], scope?: string) {
+    const normalized = String(scope || '').toLowerCase();
+    if (normalized !== 'simulacro' && normalized !== 'quiz') return rows;
+    const isSimulacro = (row: any) => String(row.trigger || '').toUpperCase() === SIMULACRO_TRIGGER;
+    return normalized === 'simulacro' ? rows.filter(isSimulacro) : rows.filter((row) => !isSimulacro(row));
   }
 
   async getByIdForUser(userId: number, id: string) {

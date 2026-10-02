@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { GeneratedResourcesService } from '../generated-resources/generated-resources.service';
+import { GeneratedResourcesService, SIMULACRO_TRIGGER } from '../generated-resources/generated-resources.service';
 import { GroqService } from '../groq.service';
 
 type ResourceType = 'SUMMARY' | 'FLASHCARDS' | 'QUIZ' | 'STUDY_PLAN' | 'EXAM_SIMULATION';
@@ -215,6 +215,8 @@ ${this.batchJsonSchema()}`,
       topic?: string;
       difficulty?: string;
       count?: number;
+      /** 'SIMULACRO' marca el recurso como examen cronometrado para listarlo aparte. */
+      origin?: string;
       knowledgeGaps?: any[];
       recentUserMessages?: string[];
     },
@@ -223,7 +225,9 @@ ${this.batchJsonSchema()}`,
     const topic = (options.topic || '').trim() || this.pickQuizTopic(gaps, options.recentUserMessages || []);
     const subject = this.inferSubject(topic, undefined, gaps) || 'general';
     const difficulty = (options.difficulty || this.resolveDifficulty(subject) || 'INTERMEDIATE').toUpperCase();
-    const count = Math.min(15, Math.max(3, options.count || 8));
+    const isSimulacro = String(options.origin || '').toUpperCase() === 'SIMULACRO';
+    const trigger = isSimulacro ? SIMULACRO_TRIGGER : 'QUIZ_TAB';
+    const count = Math.min(15, Math.max(3, options.count || (isSimulacro ? 10 : 8)));
 
     const contextBlock = this.buildQuizContextBlock(topic, subject, difficulty, gaps, options.recentUserMessages || []);
 
@@ -245,10 +249,10 @@ REGLAS OBLIGATORIAS DE NOTACIÓN MATEMÁTICA:
         role: 'user',
         content: `${contextBlock}
 
-TAREA: Genera un quiz de práctica de ${count} preguntas de opción múltiple sobre "${topic}" en ${subject}.
+TAREA: Genera ${isSimulacro ? 'un SIMULACRO de examen cronometrado' : 'un quiz de práctica'} de ${count} preguntas de opción múltiple sobre "${topic}" en ${subject}.
 Dificultad: ${difficulty}.
 Prioriza las brechas de conocimiento del estudiante.
-Varía tipos de pregunta: conceptual, aplicación, procedimiento y detección de errores.
+Varía tipos de pregunta: conceptual, aplicación, procedimiento y detección de errores.${isSimulacro ? '\nEsto es un examen cronometrado: ordena las preguntas de menor a mayor dificultad, no incluyas pistas ni la respuesta dentro del enunciado y evita repetir la misma idea dos veces.' : ''}
 Cada pregunta debe tener exactamente 4 opciones, la respuesta correcta con el texto EXACTO de una de las opciones, y una explicación breve.
 IMPORTANTE: La respuesta correcta NO siempre debe ser la primera opción (A). Distribuye las respuestas correctas entre las posiciones A, B, C y D de forma variada para que el estudiante deba leer todas las opciones.
 
@@ -267,9 +271,9 @@ ${this.quizJsonSchema()}`,
     const title = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : this.defaultTitle('QUIZ', topic);
     const id = await this.generated.saveResource(userId, conversationId, 'QUIZ', title, content, {
       subject,
-      trigger: 'QUIZ_TAB',
+      trigger,
       difficulty,
-      generatedFrom: { trigger: 'QUIZ_TAB', topic, subject },
+      generatedFrom: { trigger, topic, subject },
     });
     return this.generated.getByIdForUser(userId, String(id));
   }

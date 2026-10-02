@@ -91,10 +91,16 @@ export class AiController {
 
   @Post('resources/quiz')
   @ApiOperation({ summary: 'Generar un quiz de práctica a demanda basado en brechas de conocimiento o tema indicado' })
+  @ApiQuery({
+    name: 'origin',
+    required: false,
+    enum: ['QUIZ', 'SIMULACRO'],
+    description: 'Origen del recurso: QUIZ (pestaña Quiz) o SIMULACRO (examen cronometrado).',
+  })
   @ApiBody({ type: GenerateQuizDto })
-  async generateQuiz(@Req() req: any, @Body() dto: GenerateQuizDto) {
+  async generateQuiz(@Req() req: any, @Body() dto: GenerateQuizDto, @Query('origin') origin?: string) {
     const userId = req.user.id;
-    const resource = await this.ai.generateQuiz(userId, dto);
+    const resource = await this.ai.generateQuiz(userId, { ...dto, origin });
     return { resource };
   }
 
@@ -119,9 +125,15 @@ export class AiController {
   @Get('resources')
   @ApiOperation({ summary: 'Listar recursos académicos generados por la IA' })
   @ApiQuery({ name: 'type', required: false, example: 'QUIZ' })
-  async listResources(@Req() req: any, @Query('type') type?: string) {
+  @ApiQuery({
+    name: 'scope',
+    required: false,
+    enum: ['quiz', 'simulacro'],
+    description: 'simulacro = solo recursos del examen cronometrado; quiz = el resto.',
+  })
+  async listResources(@Req() req: any, @Query('type') type?: string, @Query('scope') scope?: string) {
     const userId = req.user.id;
-    const resources = await this.generatedResources.listResourcesForUser(userId, type);
+    const resources = await this.generatedResources.listResourcesForUser(userId, type, scope);
     return { resources };
   }
 
