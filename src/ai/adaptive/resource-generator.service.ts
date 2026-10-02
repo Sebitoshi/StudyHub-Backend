@@ -217,6 +217,8 @@ ${this.batchJsonSchema()}`,
       count?: number;
       /** 'SIMULACRO' marca el recurso como examen cronometrado para listarlo aparte. */
       origin?: string;
+      /** Texto extraído de un documento subido (PDF/DOCX); las preguntas salen de ahí. */
+      material?: string;
       knowledgeGaps?: any[];
       recentUserMessages?: string[];
     },
@@ -230,6 +232,7 @@ ${this.batchJsonSchema()}`,
     const count = Math.min(15, Math.max(3, options.count || (isSimulacro ? 10 : 8)));
 
     const contextBlock = this.buildQuizContextBlock(topic, subject, difficulty, gaps, options.recentUserMessages || []);
+    const materialBlock = this.buildMaterialBlock(options.material);
 
     const { data } = await this.groq.chatJson([
       {
@@ -247,7 +250,7 @@ REGLAS OBLIGATORIAS DE NOTACIÓN MATEMÁTICA:
       },
       {
         role: 'user',
-        content: `${contextBlock}
+        content: `${contextBlock}${materialBlock}
 
 TAREA: Genera ${isSimulacro ? 'un SIMULACRO de examen cronometrado' : 'un quiz de práctica'} de ${count} preguntas de opción múltiple sobre "${topic}" en ${subject}.
 Dificultad: ${difficulty}.
@@ -290,6 +293,8 @@ ${this.quizJsonSchema()}`,
       topic?: string;
       subject?: string;
       count?: number;
+      /** Texto extraído de un documento subido (PDF/DOCX); las tarjetas salen de ahí. */
+      material?: string;
       knowledgeGaps?: any[];
       recentUserMessages?: string[];
     },
@@ -297,10 +302,12 @@ ${this.quizJsonSchema()}`,
     const gaps = options.knowledgeGaps || [];
     const topic = (options.topic || '').trim() || this.pickQuizTopic(gaps, options.recentUserMessages || []);
     const subject = options.subject || this.inferSubject(topic, undefined, gaps) || 'general';
-    const count = Math.min(20, Math.max(3, options.count || 10));
+    // Con material subido se generan más tarjetas por defecto: un tema necesita varias.
+    const count = Math.min(20, Math.max(3, options.count || (options.material ? 15 : 10)));
     const difficulty = (this.resolveDifficulty(subject) || 'INTERMEDIATE').toUpperCase();
 
     const contextBlock = this.buildQuizContextBlock(topic, subject, difficulty, gaps, options.recentUserMessages || []);
+    const materialBlock = this.buildMaterialBlock(options.material);
 
     const { data } = await this.groq.chatJson([
       {
@@ -318,11 +325,12 @@ Cada pregunta debe cubrir una sola idea, sin incluir la respuesta, y cada respue
       },
       {
         role: 'user',
-        content: `${contextBlock}
+        content: `${contextBlock}${materialBlock}
 
 TAREA: Genera ${count} flashcards sobre "${topic}" en ${subject}.
 Dificultad: ${difficulty}.
 Prioriza las brechas de conocimiento del estudiante.
+Cada tema debe tener VARIAS tarjetas: cubre definiciones, procedimiento paso a paso, un ejemplo resuelto y un error típico, cada uno en su propia tarjeta.
 Evita preguntas repetidas.
 
 Formato JSON exacto:
@@ -651,6 +659,16 @@ Prioriza gaps y debilidades del estudiante.`;
       `MENSAJES RECIENTES DEL ESTUDIANTE (contexto de lo que ha estudiado):`,
       recentLines.length ? recentLines.join('\n') : '- ninguno',
     ].join('\n');
+  }
+
+  /**
+   * Bloque con el texto del documento subido por el estudiante. Cuando existe, la
+   * IA debe basar el recurso en ese material en lugar de inventar el temario.
+   */
+  private buildMaterialBlock(material?: string): string {
+    const text = (material || '').trim();
+    if (text.length < 40) return '';
+    return `\n\nMATERIAL DEL ESTUDIANTE (documento que acaba de subir):\n"""\n${text}\n"""\nIMPORTANTE: basa TODAS las preguntas EXCLUSIVAMENTE en este material. Reproduce su terminología, sus definiciones y sus fórmulas, y no incluyas temas que no aparezcan en el documento.`;
   }
 
   private defaultTitle(type: ResourceType, topic: string) {

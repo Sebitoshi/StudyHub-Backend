@@ -1,5 +1,7 @@
-import { Body, Controller, Delete, Get, Logger, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Logger, Param, Patch, Post, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AiService } from './ai.service';
+import { DocumentTextService } from './document-text.service';
 import { KnowledgeGapsService } from './knowledge-gaps/knowledge-gaps.service';
 import { GeneratedResourcesService } from './generated-resources/generated-resources.service';
 import { LearningGoalsService } from './learning-goals/learning-goals.service';
@@ -17,7 +19,7 @@ import { ExplainAnswerDto } from './dto/explain-answer.dto';
 import { ObjectId } from 'mongodb';
 import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('AI')
 @ApiBearerAuth()
@@ -28,6 +30,7 @@ export class AiController {
 
   constructor(
     private readonly ai: AiService,
+    private readonly documents: DocumentTextService,
     private readonly knowledgeGaps: KnowledgeGapsService,
     private readonly generatedResources: GeneratedResourcesService,
     private readonly learningGoals: LearningGoalsService,
@@ -111,6 +114,65 @@ export class AiController {
     const userId = req.user.id;
     const flashcards = await this.ai.generateFlashcards(userId, dto);
     return { flashcards };
+  }
+
+  @Post('flashcards/file')
+  @ApiOperation({ summary: 'Generar flashcards a partir de un documento subido (PDF/DOCX/TXT)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiQuery({ name: 'count', required: false, type: Number, example: 12 })
+  @ApiQuery({ name: 'topic', required: false, type: String, description: 'Tema. Si se omite se usa el nombre del archivo.' })
+  @UseInterceptors(FileInterceptor('file'))
+  async generateFlashcardsFromFile(
+    @Req() req: any,
+    @UploadedFile() file: Express.Multer.File,
+    @Query('count') count?: string,
+    @Query('topic') topic?: string,
+  ) {
+    const userId = req.user.id;
+    if (!file) throw new BadRequestException('Debes subir un archivo PDF, DOCX o TXT');
+    const material = await this.documents.extractText(file);
+    const flashcards = await this.ai.generateFlashcards(userId, {
+      topic: (topic || '').trim() || this.documents.guessTopic(file, material),
+      count: Number(count) || 12,
+      material,
+    });
+    return {
+      flashcards,
+      source: { filename: file.originalname, characters: material.length },
+    };
+  }
+
+  @Post('resources/quiz/file')
+  @ApiOperation({ summary: 'Generar un quiz o simulacro a partir de un documento subido (PDF/DOCX/TXT)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiQuery({
+    name: 'origin',
+    required: false,
+    enum: ['QUIZ', 'SIMULACRO'],
+    description: 'SIMULACRO (por defecto) o QUIZ.',
+  })
+  @ApiQuery({ name: 'count', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'difficulty', required: false, enum: ['BEGINNER', 'INTERMEDIATE', 'ADVANCED'] })
+  @UseInterceptors(FileInterceptor('file'))
+  async generateQuizFromFile(
+    @Req() req: any,
+    @UploadedFile() file: Express.Multer.File,
+    @Query('origin') origin?: string,
+    @Query('count') count?: string,
+    @Query('difficulty') difficulty?: string,
+  ) {
+    const userId = req.user.id;
+    if (!file) throw new BadRequestException('Debes subir un archivo PDF, DOCX o TXT');
+    const material = await this.documents.extractText(file);
+    const topic = this.documents.guessTopic(file, material);
+    const resource = await this.ai.generateQuiz(userId, {
+      topic,
+      count: Number(count) || undefined,
+      difficulty: (difficulty || '').trim() || undefined,
+      origin: String(origin || 'SIMULACRO').toUpperCase(),
+      material,
+    });
+    return { resource, source: { filename: file.originalname, characters: material.length, topic } };
   }
 
   @Get('flashcards')

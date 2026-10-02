@@ -24,4 +24,12 @@ export class GenerateQuizDto {
   @Min(3)
   @Max(15)
   count?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Texto del material de estudio (por ejemplo, el extraído de un PDF subido). Si viene, el quiz/simulacro se basa en este contenido.',
+  })
+  @IsOptional()
+  @IsString()
+  material?: string;
 }

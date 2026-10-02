@@ -25,4 +25,12 @@ export class GenerateFlashcardsDto {
   @Min(3)
   @Max(20)
   count?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Texto del material de estudio (por ejemplo, el extraído de un PDF subido). Si viene, las tarjetas se basan en este contenido.',
+  })
+  @IsOptional()
+  @IsString()
+  material?: string;
 }

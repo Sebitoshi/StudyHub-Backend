@@ -374,7 +374,7 @@ export class AiService {
    * Usa el tema indicado o infiere uno de las brechas de conocimiento y de los
    * temas recientes que el estudiante ha estado conversando con la IA.
    */
-  async generateQuiz(userId: number, dto: { topic?: string; difficulty?: string; count?: number; origin?: string }) {
+  async generateQuiz(userId: number, dto: { topic?: string; difficulty?: string; count?: number; origin?: string; material?: string }) {
     const [gaps, recentMessages] = await Promise.all([
       this.knowledgeGapsService.getTopGaps(userId, 10).catch(() => []),
       this.messages.find({ userId, role: 'user' }).sort({ createdAt: -1 }).limit(15).toArray().catch(() => []),
@@ -385,6 +385,7 @@ export class AiService {
       difficulty: dto.difficulty,
       count: dto.count,
       origin: dto.origin,
+      material: dto.material,
       knowledgeGaps: gaps || [],
       recentUserMessages: recentTexts,
     });
@@ -395,7 +396,7 @@ export class AiService {
    * Cada tarjeta se guarda como un recurso FLASHCARDS independiente para que el
    * estudiante pueda eliminarlas de una en una.
    */
-  async generateFlashcards(userId: number, dto: { topic?: string; subject?: string; count?: number }) {
+  async generateFlashcards(userId: number, dto: { topic?: string; subject?: string; count?: number; material?: string }) {
     const [gaps, recentMessages] = await Promise.all([
       this.knowledgeGapsService.getTopGaps(userId, 10).catch(() => []),
       this.messages.find({ userId, role: 'user' }).sort({ createdAt: -1 }).limit(15).toArray().catch(() => []),
@@ -405,6 +406,7 @@ export class AiService {
       topic: dto.topic,
       subject: dto.subject,
       count: dto.count,
+      material: dto.material,
       knowledgeGaps: gaps || [],
       recentUserMessages: recentTexts,
     });
