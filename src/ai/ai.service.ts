@@ -389,6 +389,48 @@ export class AiService {
     });
   }
 
+  /**
+   * Genera flashcards de repaso a demanda (pestaña Flashcards).
+   * Cada tarjeta se guarda como un recurso FLASHCARDS independiente para que el
+   * estudiante pueda eliminarlas de una en una.
+   */
+  async generateFlashcards(userId: number, dto: { topic?: string; subject?: string; count?: number }) {
+    const [gaps, recentMessages] = await Promise.all([
+      this.knowledgeGapsService.getTopGaps(userId, 10).catch(() => []),
+      this.messages.find({ userId, role: 'user' }).sort({ createdAt: -1 }).limit(15).toArray().catch(() => []),
+    ]);
+    const recentTexts = (recentMessages || []).map((m) => m.content || '').filter(Boolean).reverse();
+    return this.resourceGenerator.generateFlashcardsForUser(userId, null, {
+      topic: dto.topic,
+      subject: dto.subject,
+      count: dto.count,
+      knowledgeGaps: gaps || [],
+      recentUserMessages: recentTexts,
+    });
+  }
+
+  /**
+   * Lista las flashcards guardadas del estudiante ya normalizadas como tarjetas
+   * (pregunta / respuesta / pista).
+   */
+  async listFlashcards(userId: number, limit = 100) {
+    const rows = await this.generatedResourcesService.listForUser(userId);
+    const take = Math.min(200, Math.max(1, Number(limit) || 100));
+    return (rows || [])
+      .filter((row: any) => String(row.type || row.resourceType).toUpperCase() === 'FLASHCARDS')
+      .filter((row: any) => row?.content?.question && row?.content?.answer)
+      .slice(0, take)
+      .map((row: any) => ({
+        id: String(row.id || row._id),
+        question: row.content.question,
+        answer: row.content.answer,
+        hint: row.content.hint ?? null,
+        topic: row.content.topic ?? null,
+        subject: row.subject ?? row.content.subject ?? null,
+        createdAt: row.createdAt ?? null,
+      }));
+  }
+
   async getDashboard(userId: number) {
     const [analytics, studentModel, goals, knowledgeGaps, allGaps, resources] = await Promise.all([
       this.learningAnalyticsService.getAnalytics(userId),

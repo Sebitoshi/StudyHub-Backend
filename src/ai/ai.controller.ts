@@ -12,6 +12,7 @@ import { UpdateLearningGoalDto } from './dto/update-learning-goal.dto';
 import { CreateTeacherProfileDto } from './dto/create-teacher-profile.dto';
 import { UpdateTeacherProfileDto } from './dto/update-teacher-profile.dto';
 import { GenerateQuizDto } from './dto/generate-quiz.dto';
+import { GenerateFlashcardsDto } from './dto/generate-flashcards.dto';
 import { ExplainAnswerDto } from './dto/explain-answer.dto';
 import { ObjectId } from 'mongodb';
 import type { Response } from 'express';
@@ -95,6 +96,24 @@ export class AiController {
     const userId = req.user.id;
     const resource = await this.ai.generateQuiz(userId, dto);
     return { resource };
+  }
+
+  @Post('flashcards')
+  @ApiOperation({ summary: 'Generar flashcards de repaso a demanda basadas en brechas de conocimiento o tema indicado' })
+  @ApiBody({ type: GenerateFlashcardsDto })
+  async generateFlashcards(@Req() req: any, @Body() dto: GenerateFlashcardsDto) {
+    const userId = req.user.id;
+    const flashcards = await this.ai.generateFlashcards(userId, dto);
+    return { flashcards };
+  }
+
+  @Get('flashcards')
+  @ApiOperation({ summary: 'Listar las flashcards guardadas del estudiante' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 100 })
+  async listFlashcards(@Req() req: any, @Query('limit') limit?: string) {
+    const userId = req.user.id;
+    const flashcards = await this.ai.listFlashcards(userId, Number(limit) || 100);
+    return { flashcards };
   }
 
   @Get('resources')

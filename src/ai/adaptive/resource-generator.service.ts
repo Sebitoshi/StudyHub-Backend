@@ -274,6 +274,111 @@ ${this.quizJsonSchema()}`,
     return this.generated.getByIdForUser(userId, String(id));
   }
 
+  /**
+   * Genera flashcards a demanda (pestaña Flashcards del Profesor IA).
+   * Cada tarjeta se guarda como un recurso propio de tipo FLASHCARDS para que el
+   * estudiante pueda repasarlas y eliminarlas de una en una desde el frontend.
+   */
+  async generateFlashcardsForUser(
+    userId: number,
+    conversationId: any,
+    options: {
+      topic?: string;
+      subject?: string;
+      count?: number;
+      knowledgeGaps?: any[];
+      recentUserMessages?: string[];
+    },
+  ) {
+    const gaps = options.knowledgeGaps || [];
+    const topic = (options.topic || '').trim() || this.pickQuizTopic(gaps, options.recentUserMessages || []);
+    const subject = options.subject || this.inferSubject(topic, undefined, gaps) || 'general';
+    const count = Math.min(20, Math.max(3, options.count || 10));
+    const difficulty = (this.resolveDifficulty(subject) || 'INTERMEDIATE').toUpperCase();
+
+    const contextBlock = this.buildQuizContextBlock(topic, subject, difficulty, gaps, options.recentUserMessages || []);
+
+    const { data } = await this.groq.chatJson([
+      {
+        role: 'system',
+        content: `Eres un profesor universitario que diseña flashcards de repaso en español.
+Responde SOLO con JSON válido, sin markdown de código ni texto adicional.
+Usa Markdown dentro de los campos de texto (negritas con **texto**, listas) y notación LaTeX para matemáticas.
+
+REGLAS OBLIGATORIAS DE NOTACIÓN MATEMÁTICA:
+- Toda expresión matemática debe ir SIEMPRE entre $...$ (en línea) o $$...$$ (en bloque), tanto en la pregunta como en la respuesta.
+- Correcto: $(-\\infty, 2) \\cup (2, \\infty)$, $\\mathbb{R} \\setminus \\{2\\}$, $x \\neq 0$.
+- Incorrecto (PROHIBIDO): (-\\infty, 2) ∪ (2, ∞) sin los $.
+- Usa comandos LaTeX (\\infty, \\mathbb{R}, \\cup, \\geq, \\neq, \\frac{a}{b}) en lugar de caracteres sueltos.
+Cada pregunta debe cubrir una sola idea, sin incluir la respuesta, y cada respuesta debe ser breve pero completa.`,
+      },
+      {
+        role: 'user',
+        content: `${contextBlock}
+
+TAREA: Genera ${count} flashcards sobre "${topic}" en ${subject}.
+Dificultad: ${difficulty}.
+Prioriza las brechas de conocimiento del estudiante.
+Evita preguntas repetidas.
+
+Formato JSON exacto:
+${this.flashcardsJsonSchema()}`,
+      },
+    ]);
+
+    const cards = Array.isArray(data.cards)
+      ? data.cards.filter((card: any) => card?.question && card?.answer).slice(0, count)
+      : [];
+
+    const flashcards: Array<{
+      id: string;
+      question: string;
+      answer: string;
+      hint: string | null;
+      topic: string;
+      subject: string;
+    }> = [];
+    for (const card of cards) {
+      const question = String(card.question).trim();
+      const answer = String(card.answer).trim();
+      const hint = card.hint ? String(card.hint).trim() : null;
+      const id = await this.generated.saveResource(
+        userId,
+        conversationId,
+        'FLASHCARDS',
+        this.flashcardTitle(question, topic),
+        { type: 'FLASHCARDS', topic, subject, question, answer, hint },
+        {
+          subject,
+          trigger: 'FLASHCARDS_TAB',
+          difficulty,
+          generatedFrom: { trigger: 'FLASHCARDS_TAB', topic, subject },
+        },
+      );
+      flashcards.push({ id: String(id), question, answer, hint, topic, subject });
+    }
+    return flashcards;
+  }
+
+  private flashcardTitle(question: string, topic: string) {
+    const clean = question.replace(/\s+/g, ' ').trim();
+    if (!clean) return this.defaultTitle('FLASHCARDS', topic);
+    return clean.length > 120 ? `${clean.slice(0, 117)}...` : clean;
+  }
+
+  private flashcardsJsonSchema(): string {
+    return `{
+  "title": "Título del mazo de flashcards",
+  "cards": [
+    {
+      "question": "Pregunta corta, con **negritas** o $x^2$ si aplica",
+      "answer": "Respuesta breve, con **negritas** o $fórmula$ si aplica",
+      "hint": "Pista opcional para recordar la respuesta"
+    }
+  ]
+}`;
+  }
+
   /** @deprecated Use generateAndPersistResources for real Groq content. */
   generateQuickResources(topic: string, level?: string) {
     return {
