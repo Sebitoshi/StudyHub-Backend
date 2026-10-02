@@ -92,14 +92,6 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/engines",
-      "bcrypt",
-      "prisma",
-      "@sparticuz/chromium"
-    ]
-  },
   "jest": {
     "moduleFileExtensions": [
       "js",
@@ -118,6 +110,13 @@
     "testEnvironment": "node"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@scarf/scarf", "esbuild", "unrs-resolver"]
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "prisma",
+      "bcrypt",
+      "esbuild",
+      "unrs-resolver",
+      "@sparticuz/chromium"
+    ]
   }
 }

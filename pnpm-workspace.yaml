@@ -1,1 +1,16 @@
-onlyBuiltDependencies: '["@prisma/engines","prisma"]'
+allowBuilds:
+  '@prisma/engines': true
+  '@sparticuz/chromium': true
+  bcrypt: true
+  esbuild: true
+  prisma: true
+  unrs-resolver: true
+  '@scarf/scarf': false
+
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - prisma
+  - bcrypt
+  - esbuild
+  - unrs-resolver
+  - '@sparticuz/chromium'
