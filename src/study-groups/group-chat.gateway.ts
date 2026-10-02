@@ -77,8 +77,10 @@ export class GroupChatGateway implements OnGatewayConnection {
     this.server.to(`group_${data.groupId}`).emit('message-received', message);
   }
 
-  // Method to emit image message from HTTP controller
-  emitImageMessage(groupId: number, message: any) {
-    this.server.to(`group_${groupId}`).emit('message-received', message);
+  // Method to emit message from HTTP controller (imagen o texto)
+  emitGroupMessage(groupId: number, message: any) {
+    // En serverless puede no haber servidor de WebSocket adjunto; el mensaje ya
+    // se guardó por HTTP, así que sólo avisamos si hay a quién avisar.
+    this.server?.to(`group_${groupId}`).emit('message-received', message);
   }
 }

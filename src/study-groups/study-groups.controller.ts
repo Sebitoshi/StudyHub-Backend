@@ -30,6 +30,7 @@ import { GroupChatGateway } from './group-chat.gateway';
 import { CloudinaryService } from './cloudinary.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { CreateSessionDto } from './dto/create-session.dto';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @ApiTags('Study Groups')
 @ApiBearerAuth()
@@ -156,6 +157,22 @@ export class StudyGroupsController {
     return this.chatService.getMessages(id);
   }
 
+  @Post(':id/messages')
+  @ApiOperation({ summary: 'Enviar un mensaje de texto al chat del grupo' })
+  @ApiResponse({ status: 201, description: 'Mensaje guardado' })
+  @ApiResponse({ status: 400, description: 'Mensaje vacío o demasiado largo' })
+  async sendMessage(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: { id: number },
+    @Body() dto: SendMessageDto,
+  ) {
+    const message = await this.chatService.saveMessage(id, user.id, dto.content.trim());
+    // Si hay clientes conectados por WebSocket se les avisa en vivo; si no (Vercel
+    // no lo soporta), ellos lo recogen con el sondeo del historial.
+    this.chatGateway.emitGroupMessage(id, message);
+    return message;
+  }
+
   @Post(':id/messages/image')
   @ApiOperation({ summary: 'Subir imagen al chat del grupo' })
   @ApiConsumes('multipart/form-data')
@@ -179,7 +196,7 @@ export class StudyGroupsController {
       undefined,
       imageUrl,
     );
-    this.chatGateway.emitImageMessage(id, message);
+    this.chatGateway.emitGroupMessage(id, message);
     return message;
   }
 }
