@@ -610,6 +610,49 @@ Redirige a: `${FRONTEND_URL}/auth/callback?token=...&user=...`
 
 ---
 
+## Sandbox — `/sandbox` (JWT)
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/sandbox/exercises` | Listar ejercicios del usuario |
+| POST | `/sandbox/exercises` | Crear ejercicio |
+| PUT | `/sandbox/exercises/:id` | Actualizar ejercicio |
+| DELETE | `/sandbox/exercises/:id` | Eliminar ejercicio |
+| POST | `/sandbox/attempts` | Registrar un intento de código |
+| GET | `/sandbox/attempts` | Historial de intentos (query: `?exerciseId=N`) |
+| DELETE | `/sandbox/attempts` | Limpiar historial de intentos |
+| GET | `/sandbox/stats` | Progreso del sandbox |
+
+```json
+// POST /sandbox/exercises — Request
+{
+  "title": "Suma de dos números",
+  "language": "python",
+  "description": "Suma dos enteros",
+  "code": "print(2+3)",
+  "tests": [
+    { "label": "Caso 1", "stdin": "5 3", "expected": "8" },
+    { "label": "Caso 2", "stdin": "10 20", "expected": "30" }
+  ]
+}
+
+// POST /sandbox/attempts — Request
+{
+  "exerciseId": 1,
+  "language": "python",
+  "code": "a, b = map(int, input().split())\nprint(a + b)",
+  "output": "8",
+  "passed": true,
+  "testedCases": 2,
+  "passedCases": 2
+}
+
+// GET /sandbox/stats — Response 200
+{ "attempts": 20, "passed": 15, "exercisesSaved": 5 }
+```
+
+---
+
 ## Agenda / Calendario — `/calendar` (JWT)
 
 | Método | Ruta | Descripción |
@@ -681,6 +724,66 @@ Redirige a: `${FRONTEND_URL}/auth/callback?token=...&user=...`
 
 // GET /calendar/google/connect — Response 200
 { "url": "https://accounts.google.com/o/oauth2/v2/auth?..." }
+```
+
+---
+
+## WebSockets (Socket.IO)
+
+La app usa Socket.IO para comunicación en tiempo real. Autenticación via token JWT en handshake.
+
+### Conexión inicial
+```
+socket.io(BASE_URL, { auth: { token: "<access_token>" } })
+```
+o bien via headers:
+```
+socket.io(BASE_URL, { extraHeaders: { Authorization: "Bearer <access_token>" } })
+```
+
+### Notificaciones — Namespace `/notifications`
+
+Al conectarte, el servidor te une automáticamente a una sala `user_<userId>`. Las notificaciones se emiten automáticamente al usuario correspondiente.
+
+| Evento (escuchar) | Descripción |
+|-------------------|-------------|
+| `notification:created` | Nueva notificación recibida |
+
+```json
+// notification:created — Payload
+{
+  "id": 1,
+  "title": "Tarea próxima a vencer",
+  "message": "La tarea de Cálculo vence mañana",
+  "type": "TASK_DUE",
+  "read": false,
+  "createdAt": "2026-08-01T10:00:00Z"
+}
+```
+
+### Chat de Grupos — Namespace `/group-chat`
+
+| Evento (emitir) | Payload | Descripción |
+|------------------|---------|-------------|
+| `join-room` | `{ groupId: number }` | Unirse al chat del grupo |
+| `leave-room` | `{ groupId: number }` | Salir del chat del grupo |
+| `send-message` | `{ groupId: number, content: string }` | Enviar mensaje de texto |
+
+| Evento (escuchar) | Descripción |
+|-------------------|-------------|
+| `message-received` | Nuevo mensaje en el grupo |
+
+```json
+// message-received — Payload
+{
+  "id": 42,
+  "groupId": 1,
+  "userId": 5,
+  "userName": "Juan Pérez",
+  "content": "¿Ya resolvieron el ejercicio 3?",
+  "type": "TEXT",
+  "createdAt": "2026-08-01T14:30:00Z"
+}
 ```
 
 ---
