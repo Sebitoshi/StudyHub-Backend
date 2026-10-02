@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GroqService } from '../ai/groq.service';
-import { ensurePdfRuntime } from '../common/pdf-runtime';
+import { extractPdfText } from '../common/pdf-runtime';
 
 @Injectable()
 export class ResumeAnalyzerService {
@@ -71,18 +71,9 @@ export class ResumeAnalyzerService {
 
   private async parsePdf(buffer: Buffer): Promise<string> {
     try {
-      // Sin estos sustitutos el require de pdf-parse falla en serverless
-      // ("DOMMatrix is not defined"): ver comentario en document-text.service.
-      ensurePdfRuntime();
-      // pdf-parse v2 expone la clase PDFParse, ya no es una función.
-      const { PDFParse } = require('pdf-parse');
-      const parser = new PDFParse({ data: buffer });
-      try {
-        const data = await parser.getText();
-        return data?.text || '';
-      } finally {
-        await parser.destroy().catch(() => undefined);
-      }
+      // Mismo camino que document-text.service: runtime sin @napi-rs/canvas,
+      // worker incluido en el despliegue y API v2 de pdf-parse.
+      return await extractPdfText(buffer);
     } catch {
       throw new BadRequestException('Error al leer el archivo PDF');
     }

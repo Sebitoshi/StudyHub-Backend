@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { ensurePdfRuntime } from '../common/pdf-runtime';
+import { extractPdfText } from '../common/pdf-runtime';
 
 /**
  * Máximo de caracteres del documento que se envían al modelo (≈ 10 mil tokens).
@@ -79,19 +79,10 @@ export class DocumentTextService {
 
   private async parsePdf(buffer: Buffer): Promise<string> {
     try {
-      // Garantiza DOMMatrix y compañía ANTES de cargar pdf-parse: en serverless
-      // no existe `@napi-rs/canvas` y el require revienta con "DOMMatrix is not
-      // defined" (error que se devolvía como 400 al subir un PDF).
-      ensurePdfRuntime();
-      // pdf-parse v2 ya no es una función: expone la clase PDFParse.
-      const { PDFParse } = require('pdf-parse');
-      const parser = new PDFParse({ data: buffer });
-      try {
-        const data = await parser.getText();
-        return data?.text || '';
-      } finally {
-        await parser.destroy().catch(() => undefined);
-      }
+      // Runtime (DOMMatrix sin @napi-rs/canvas), worker copiado al build y API
+      // v2 de pdf-parse: sin esto Vercel respondía 400 "No pudimos leer el
+      // archivo PDF" al subir un PDF.
+      return await extractPdfText(buffer);
     } catch (err: any) {
       this.logger.warn(`No se pudo leer el PDF: ${err?.stack || err}`);
       throw new BadRequestException('No pudimos leer el archivo PDF.');

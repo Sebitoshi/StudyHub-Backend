@@ -11,6 +11,9 @@
  * entorno ya trae las clases reales, no se toca nada.
  */
 
+import { existsSync } from 'fs';
+import { dirname, join } from 'path';
+
 type Matrix2D = [number, number, number, number, number, number];
 
 const IDENTITY: Matrix2D = [1, 0, 0, 1, 0, 0];
@@ -253,4 +256,60 @@ export function ensurePdfRuntime(): void {
   if (typeof scope.DOMMatrix !== 'function') scope.DOMMatrix = DOMMatrix2D;
   if (typeof scope.ImageData !== 'function') scope.ImageData = ImageData2D;
   if (typeof scope.Path2D !== 'function') scope.Path2D = Path2D2D;
+}
+
+/**
+ * Ruta del `pdf.worker.mjs` que pdf.js carga con `await import(workerSrc)`.
+ *
+ * Prioridad:
+ *  1. La copia que `scripts/copy-pdf-worker.js` deja junto al build. Es la única
+ *     forma de que el archivo exista en Vercel: el trazador de archivos de la
+ *     plataforma no sigue el import dinámico que hace pdf-parse dentro de su
+ *     propio paquete (de ahí el "Setting up fake worker failed: Cannot find
+ *     module .../pdf.worker.mjs" al subir un PDF).
+ *  2. La del paquete `pdf-parse`, que sirve en desarrollo local.
+ */
+function resolveWorkerPath(): string | undefined {
+  try {
+    const bundled = require.resolve('./pdf.worker.mjs');
+    if (existsSync(bundled)) return bundled;
+  } catch {
+    // Sin copia (build sin el paso extra): seguimos con la opción 2.
+  }
+  try {
+    const delPaquete = join(dirname(require.resolve('pdf-parse')), 'pdf.worker.mjs');
+    if (existsSync(delPaquete)) return delPaquete;
+  } catch {
+    // pdf-parse no resoluble: que pdf-parse use su valor por defecto.
+  }
+  return undefined;
+}
+
+/** Apunta a pdf-parse a un worker que realmente exista en el runtime. */
+function applyPdfWorker(PDFParse: { setWorker?: (src?: string) => string }): void {
+  const ruta = resolveWorkerPath();
+  if (!ruta || typeof PDFParse?.setWorker !== 'function') return;
+  try {
+    PDFParse.setWorker(ruta);
+  } catch {
+    // Se deja el workerSrc por defecto; lo avisará pdf.js si falla.
+  }
+}
+
+/**
+ * Extrae el texto de un PDF con pdf-parse v2 (clase `PDFParse`), garantizando el
+ * runtime y el worker antes de leer. Lanza si el documento no se puede leer.
+ */
+export async function extractPdfText(buffer: Buffer): Promise<string> {
+  ensurePdfRuntime();
+  // pdf-parse v2 ya no es una función: expone la clase PDFParse.
+  const { PDFParse } = require('pdf-parse');
+  applyPdfWorker(PDFParse);
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const data = await parser.getText();
+    return data?.text || '';
+  } finally {
+    await parser.destroy().catch(() => undefined);
+  }
 }
