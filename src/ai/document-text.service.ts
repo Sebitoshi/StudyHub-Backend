@@ -1,11 +1,11 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 
 /**
- * Máximo de caracteres del documento que se envían al modelo. Un apunte largo
- * completo no cabe en el contexto y tampoco aporta: las primeras páginas suelen
- * contener el temario y las definiciones que necesitamos.
+ * Máximo de caracteres del documento que se envían al modelo (≈ 10 mil tokens).
+ * Da para un tema completo o un capítulo largo sin acercarse al contexto del
+ * modelo ni disparar el costo de la llamada.
  */
-export const MAX_MATERIAL_CHARS = 14000;
+export const MAX_MATERIAL_CHARS = 40000;
 
 /** Mínimo de texto útil para considerar que el documento se pudo leer. */
 const MIN_USEFUL_CHARS = 40;

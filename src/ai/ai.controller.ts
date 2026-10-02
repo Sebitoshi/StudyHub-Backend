@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Delete, Get, Logger, Param, Patc
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AiService } from './ai.service';
 import { DocumentTextService } from './document-text.service';
+import { UploadsService } from './uploads/uploads.service';
 import { KnowledgeGapsService } from './knowledge-gaps/knowledge-gaps.service';
 import { GeneratedResourcesService } from './generated-resources/generated-resources.service';
 import { LearningGoalsService } from './learning-goals/learning-goals.service';
@@ -31,6 +32,7 @@ export class AiController {
   constructor(
     private readonly ai: AiService,
     private readonly documents: DocumentTextService,
+    private readonly uploads: UploadsService,
     private readonly knowledgeGaps: KnowledgeGapsService,
     private readonly generatedResources: GeneratedResourcesService,
     private readonly learningGoals: LearningGoalsService,
@@ -121,25 +123,69 @@ export class AiController {
   @ApiConsumes('multipart/form-data')
   @ApiQuery({ name: 'count', required: false, type: Number, example: 12 })
   @ApiQuery({ name: 'topic', required: false, type: String, description: 'Tema. Si se omite se usa el nombre del archivo.' })
+  @ApiQuery({
+    name: 'uploadId',
+    required: false,
+    type: String,
+    description: 'Id de una subida por trozos ya completada (para documentos grandes).',
+  })
   @UseInterceptors(FileInterceptor('file'))
   async generateFlashcardsFromFile(
     @Req() req: any,
     @UploadedFile() file: Express.Multer.File,
     @Query('count') count?: string,
     @Query('topic') topic?: string,
+    @Query('uploadId') uploadId?: string,
   ) {
     const userId = req.user.id;
-    if (!file) throw new BadRequestException('Debes subir un archivo PDF, DOCX o TXT');
-    const material = await this.documents.extractText(file);
+    const source = await this.resolveMaterial(userId, uploadId, file, topic);
     const flashcards = await this.ai.generateFlashcards(userId, {
-      topic: (topic || '').trim() || this.documents.guessTopic(file, material),
+      topic: source.topic,
       count: Number(count) || 12,
-      material,
+      material: source.material,
     });
     return {
       flashcards,
-      source: { filename: file.originalname, characters: material.length },
+      source: { filename: source.filename, characters: source.material.length },
     };
+  }
+
+  @Post('uploads/chunk')
+  @ApiOperation({ summary: 'Subir un trozo de un documento grande (subida por partes)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiQuery({ name: 'uploadId', required: false, type: String, description: 'Se omite en el primer trozo.' })
+  @ApiQuery({ name: 'index', required: true, type: Number, example: 0 })
+  @ApiQuery({ name: 'total', required: true, type: Number, example: 5 })
+  @ApiQuery({ name: 'filename', required: false, type: String })
+  @ApiQuery({ name: 'mimetype', required: false, type: String })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadChunk(
+    @Req() req: any,
+    @UploadedFile() file: Express.Multer.File,
+    @Query('uploadId') uploadId?: string,
+    @Query('index') index?: string,
+    @Query('total') total?: string,
+    @Query('filename') filename?: string,
+    @Query('mimetype') mimetype?: string,
+  ) {
+    const userId = req.user.id;
+    if (!file) throw new BadRequestException('Falta el trozo del documento');
+    return this.uploads.saveChunk(userId, {
+      uploadId: uploadId || null,
+      index: Number(index) || 0,
+      total: Number(total) || 1,
+      filename: filename || file.originalname,
+      mimetype: mimetype || file.mimetype,
+      buffer: file.buffer,
+    });
+  }
+
+  @Delete('uploads/:id')
+  @ApiOperation({ summary: 'Cancelar una subida por partes y descartar sus trozos' })
+  @ApiParam({ name: 'id', description: 'Id de la subida' })
+  async cancelUpload(@Req() req: any, @Param('id') id: string) {
+    const userId = req.user.id;
+    return this.uploads.cancel(userId, id);
   }
 
   @Post('resources/quiz/file')
@@ -153,6 +199,12 @@ export class AiController {
   })
   @ApiQuery({ name: 'count', required: false, type: Number, example: 10 })
   @ApiQuery({ name: 'difficulty', required: false, enum: ['BEGINNER', 'INTERMEDIATE', 'ADVANCED'] })
+  @ApiQuery({
+    name: 'uploadId',
+    required: false,
+    type: String,
+    description: 'Id de una subida por trozos ya completada (para documentos grandes).',
+  })
   @UseInterceptors(FileInterceptor('file'))
   async generateQuizFromFile(
     @Req() req: any,
@@ -160,19 +212,22 @@ export class AiController {
     @Query('origin') origin?: string,
     @Query('count') count?: string,
     @Query('difficulty') difficulty?: string,
+    @Query('uploadId') uploadId?: string,
   ) {
     const userId = req.user.id;
-    if (!file) throw new BadRequestException('Debes subir un archivo PDF, DOCX o TXT');
-    const material = await this.documents.extractText(file);
-    const topic = this.documents.guessTopic(file, material);
+    const source = await this.resolveMaterial(userId, uploadId, file);
+    const topic = source.topic;
     const resource = await this.ai.generateQuiz(userId, {
       topic,
       count: Number(count) || undefined,
       difficulty: (difficulty || '').trim() || undefined,
       origin: String(origin || 'SIMULACRO').toUpperCase(),
-      material,
+      material: source.material,
     });
-    return { resource, source: { filename: file.originalname, characters: material.length, topic } };
+    return {
+      resource,
+      source: { filename: source.filename, characters: source.material.length, topic },
+    };
   }
 
   @Get('flashcards')
@@ -414,5 +469,36 @@ export class AiController {
   async explainAnswer(@Body() dto: ExplainAnswerDto) {
     const result = await this.ai.explainAnswer(dto);
     return result;
+  }
+
+  /**
+   * Resuelve el material de estudio: una subida por trozos ya completada
+   * (`uploadId`, para PDFs grandes) o un archivo enviado en esta misma petición.
+   */
+  private async resolveMaterial(
+    userId: number,
+    uploadId: string | undefined,
+    file: Express.Multer.File | undefined,
+    topic?: string,
+  ): Promise<{ material: string; topic: string; filename: string }> {
+    if (uploadId) {
+      const source = await this.uploads.assembleText(userId, uploadId);
+      return {
+        material: source.text,
+        topic: (topic || '').trim() || source.topic,
+        filename: source.filename,
+      };
+    }
+
+    if (!file) {
+      throw new BadRequestException('Debes subir un archivo PDF, DOCX o TXT');
+    }
+
+    const material = await this.documents.extractText(file);
+    return {
+      material,
+      topic: (topic || '').trim() || this.documents.guessTopic(file, material),
+      filename: file.originalname,
+    };
   }
 }

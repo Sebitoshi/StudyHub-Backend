@@ -17,6 +17,8 @@ import { StudentModelService } from './student-models/student-model.service';
 import { GeneratedResourcesRepository } from './generated-resources/generated-resources.repository';
 import { GeneratedResourcesService } from './generated-resources/generated-resources.service';
 import { DocumentTextService } from './document-text.service';
+import { UploadsRepository } from './uploads/uploads.repository';
+import { UploadsService } from './uploads/uploads.service';
 import { LearningGoalsRepository } from './learning-goals/learning-goals.repository';
 import { LearningGoalsService } from './learning-goals/learning-goals.service';
 import { LearningPathsRepository } from './learning-paths/learning-paths.repository';
@@ -62,6 +64,8 @@ import { PrismaModule } from '../prisma/prisma.module';
     GeneratedResourcesRepository,
     GeneratedResourcesService,
     DocumentTextService,
+    UploadsRepository,
+    UploadsService,
     LearningGoalsRepository,
     LearningGoalsService,
     LearningPathsRepository,
