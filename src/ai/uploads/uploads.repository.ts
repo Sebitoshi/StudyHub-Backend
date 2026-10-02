@@ -15,6 +15,7 @@ export const MAX_CHUNKS = 200;
 const STALE_UPLOAD_MS = 60 * 60 * 1000;
 
 export interface UploadSession {
+  /** Se usa el propio id de la subida como `_id` (string, no ObjectId). */
   _id: string;
   userId: number;
   filename: string;
@@ -25,32 +26,40 @@ export interface UploadSession {
   updatedAt: Date;
 }
 
+export interface UploadChunkRow {
+  uploadId: string;
+  userId: number;
+  index: number;
+  size: number;
+  /** Contenido del trozo en base64. */
+  data: string;
+  createdAt: Date;
+}
+
 @Injectable()
 export class UploadsRepository {
+  // Se tipan como `any` a propósito: estos documentos usan `_id` string, no ObjectId.
   constructor(
-    @Inject(DOCUMENT_UPLOADS_COLLECTION) private readonly sessions: Collection,
-    @Inject(DOCUMENT_UPLOAD_CHUNKS_COLLECTION) private readonly chunks: Collection,
+    @Inject(DOCUMENT_UPLOADS_COLLECTION) private readonly sessions: Collection<any>,
+    @Inject(DOCUMENT_UPLOAD_CHUNKS_COLLECTION) private readonly chunks: Collection<any>,
   ) {}
 
-  async createSession(session: UploadSession) {
+  async createSession(session: UploadSession): Promise<UploadSession> {
     await this.sessions.insertOne({ ...session });
     return session;
   }
 
   async getSession(uploadId: string): Promise<UploadSession | null> {
-    return this.sessions.findOne({ _id: uploadId as any });
+    return this.sessions.findOne({ _id: uploadId });
   }
 
-  async setReceived(uploadId: string, received: number) {
-    await this.sessions.updateOne(
-      { _id: uploadId as any },
-      { $set: { received, updatedAt: new Date() } },
-    );
+  async setReceived(uploadId: string, received: number): Promise<void> {
+    await this.sessions.updateOne({ _id: uploadId }, { $set: { received, updatedAt: new Date() } });
   }
 
   /** Guarda un trozo en base64 para no depender del tipo binario de BSON. */
-  async saveChunk(uploadId: string, userId: number, index: number, buffer: Buffer) {
-    await this.chunks.deleteOne({ uploadId, index } as any);
+  async saveChunk(uploadId: string, userId: number, index: number, buffer: Buffer): Promise<void> {
+    await this.chunks.deleteOne({ uploadId, index });
     await this.chunks.insertOne({
       uploadId,
       userId,
@@ -58,29 +67,32 @@ export class UploadsRepository {
       size: buffer.length,
       data: buffer.toString('base64'),
       createdAt: new Date(),
-    } as any);
+    });
   }
 
-  async listChunks(uploadId: string): Promise<Array<{ index: number; data: string }>> {
-    return this.chunks.find({ uploadId } as any).sort({ index: 1 }).toArray() as any;
+  async listChunks(uploadId: string): Promise<UploadChunkRow[]> {
+    return this.chunks.find({ uploadId }).sort({ index: 1 }).toArray();
   }
 
   async countChunks(uploadId: string): Promise<number> {
-    return this.chunks.countDocuments({ uploadId } as any);
+    return this.chunks.countDocuments({ uploadId });
   }
 
-  async deleteUpload(uploadId: string) {
-    await this.chunks.deleteMany({ uploadId } as any);
-    await this.sessions.deleteOne({ _id: uploadId as any });
+  async deleteUpload(uploadId: string): Promise<void> {
+    await this.chunks.deleteMany({ uploadId });
+    await this.sessions.deleteOne({ _id: uploadId });
   }
 
   /** Limpia subidas viejas del usuario para no acumular basura. */
-  async deleteStaleUploads(userId: number) {
+  async deleteStaleUploads(userId: number): Promise<void> {
     const cutoff = new Date(Date.now() - STALE_UPLOAD_MS);
-    const stale = (await this.sessions.find({ userId, updatedAt: { $lt: cutoff } } as any).toArray()) as any[];
-    for (const session of stale || []) {
-      await this.chunks.deleteMany({ uploadId: session._id } as any);
+    const stale: UploadSession[] = await this.sessions
+      .find({ userId, updatedAt: { $lt: cutoff } })
+      .toArray();
+
+    for (const session of stale) {
+      await this.chunks.deleteMany({ uploadId: session._id });
     }
-    await this.sessions.deleteMany({ userId, updatedAt: { $lt: cutoff } } as any);
+    await this.sessions.deleteMany({ userId, updatedAt: { $lt: cutoff } });
   }
 }
