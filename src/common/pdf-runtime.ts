@@ -11,8 +11,10 @@
  * entorno ya trae las clases reales, no se toca nada.
  */
 
-import { existsSync } from 'fs';
+import { existsSync, statSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { dirname, join } from 'path';
+import { PDF_WORKER_BASE64 } from './pdf-worker-content';
 
 type Matrix2D = [number, number, number, number, number, number];
 
@@ -23,7 +25,10 @@ function toMatrix2D(init: unknown): Matrix2D {
   if (typeof init === 'string') {
     const match = init.match(/matrix\(([^)]+)\)/);
     if (match) {
-      const values = match[1].split(/[,\s]+/).filter(Boolean).map(Number);
+      const values = match[1]
+        .split(/[,\s]+/)
+        .filter(Boolean)
+        .map(Number);
       if (values.length === 6) return values as Matrix2D;
     }
     return [...IDENTITY];
@@ -34,12 +39,28 @@ function toMatrix2D(init: unknown): Matrix2D {
     const values = Array.from(init as ArrayLike<number>);
     if (values.length === 6) return values as Matrix2D;
     // matrix3d: primer y quinta columna de la matriz 4x4.
-    if (values.length >= 16) return [values[0], values[1], values[4], values[5], values[12], values[13]];
-    if (values.length === 4) return [values[0], values[1], values[2], values[3], 0, 0];
+    if (values.length >= 16)
+      return [
+        values[0],
+        values[1],
+        values[4],
+        values[5],
+        values[12],
+        values[13],
+      ];
+    if (values.length === 4)
+      return [values[0], values[1], values[2], values[3], 0, 0];
     return [...IDENTITY];
   }
   const source = init as Record<string, number>;
-  return [source.a ?? 1, source.b ?? 0, source.c ?? 0, source.d ?? 1, source.e ?? 0, source.f ?? 0];
+  return [
+    source.a ?? 1,
+    source.b ?? 0,
+    source.c ?? 0,
+    source.d ?? 1,
+    source.e ?? 0,
+    source.f ?? 0,
+  ];
 }
 
 class DOMMatrix2D {
@@ -72,25 +93,56 @@ class DOMMatrix2D {
     return new DOMMatrix2D(values);
   }
 
-  get m11() { return this.a; }
-  set m11(value: number) { this.a = value; }
-  get m12() { return this.b; }
-  set m12(value: number) { this.b = value; }
-  get m21() { return this.c; }
-  set m21(value: number) { this.c = value; }
-  get m22() { return this.d; }
-  set m22(value: number) { this.d = value; }
-  get m41() { return this.e; }
-  set m41(value: number) { this.e = value; }
-  get m42() { return this.f; }
-  set m42(value: number) { this.f = value; }
+  get m11() {
+    return this.a;
+  }
+  set m11(value: number) {
+    this.a = value;
+  }
+  get m12() {
+    return this.b;
+  }
+  set m12(value: number) {
+    this.b = value;
+  }
+  get m21() {
+    return this.c;
+  }
+  set m21(value: number) {
+    this.c = value;
+  }
+  get m22() {
+    return this.d;
+  }
+  set m22(value: number) {
+    this.d = value;
+  }
+  get m41() {
+    return this.e;
+  }
+  set m41(value: number) {
+    this.e = value;
+  }
+  get m42() {
+    return this.f;
+  }
+  set m42(value: number) {
+    this.f = value;
+  }
 
   get is2D() {
     return true;
   }
 
   get isIdentity() {
-    return this.a === 1 && this.b === 0 && this.c === 0 && this.d === 1 && this.e === 0 && this.f === 0;
+    return (
+      this.a === 1 &&
+      this.b === 0 &&
+      this.c === 0 &&
+      this.d === 1 &&
+      this.e === 0 &&
+      this.f === 0
+    );
   }
 
   multiply(other: unknown) {
@@ -195,11 +247,45 @@ class DOMMatrix2D {
   }
 
   toFloat32Array() {
-    return new Float32Array([this.a, this.b, 0, 0, this.c, this.d, 0, 0, 0, 0, 1, 0, this.e, this.f, 0, 1]);
+    return new Float32Array([
+      this.a,
+      this.b,
+      0,
+      0,
+      this.c,
+      this.d,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      this.e,
+      this.f,
+      0,
+      1,
+    ]);
   }
 
   toFloat64Array() {
-    return new Float64Array([this.a, this.b, 0, 0, this.c, this.d, 0, 0, 0, 0, 1, 0, this.e, this.f, 0, 1]);
+    return new Float64Array([
+      this.a,
+      this.b,
+      0,
+      0,
+      this.c,
+      this.d,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      this.e,
+      this.f,
+      0,
+      1,
+    ]);
   }
 
   toJSON() {
@@ -259,25 +345,60 @@ export function ensurePdfRuntime(): void {
 }
 
 /**
+ * Ruta en disco del worker incrustado en `pdf-worker-content.ts`.
+ *
+ * Es la opción principal en serverless: Vercel empaqueta solo los archivos que
+ * siguen los `require`/`import` estáticos, y el worker se carga con un import
+ * dinámico que el trazador no ve. Llevándolo dentro del propio JavaScript y
+ * escribiéndolo en /tmp (única carpeta escribible en la función) nos aseguramos
+ * de que exista sin depender del empaquetado.
+ */
+const EMBEDDED_WORKER_PATH = join(tmpdir(), 'studyhub-pdf.worker.mjs');
+
+let embeddedListo = false;
+
+function materializeEmbeddedWorker(): string | undefined {
+  try {
+    if (embeddedListo && existsSync(EMBEDDED_WORKER_PATH))
+      return EMBEDDED_WORKER_PATH;
+    const bytes = Buffer.from(PDF_WORKER_BASE64, 'base64');
+    if (
+      !existsSync(EMBEDDED_WORKER_PATH) ||
+      statSync(EMBEDDED_WORKER_PATH).size !== bytes.length
+    ) {
+      writeFileSync(EMBEDDED_WORKER_PATH, bytes);
+    }
+    embeddedListo = true;
+    return EMBEDDED_WORKER_PATH;
+  } catch {
+    // /tmp no escribible o contenido corrupto: seguimos con las copias en disco.
+    return undefined;
+  }
+}
+
+/**
  * Ruta del `pdf.worker.mjs` que pdf.js carga con `await import(workerSrc)`.
  *
  * Prioridad:
- *  1. La copia que `scripts/copy-pdf-worker.js` deja junto al build. Es la única
- *     forma de que el archivo exista en Vercel: el trazador de archivos de la
- *     plataforma no sigue el import dinámico que hace pdf-parse dentro de su
- *     propio paquete (de ahí el "Setting up fake worker failed: Cannot find
- *     module .../pdf.worker.mjs" al subir un PDF).
- *  2. La del paquete `pdf-parse`, que sirve en desarrollo local.
+ *  1. El worker incrustado escrito en /tmp: la única vía fiable en Vercel.
+ *  2. La copia que `scripts/copy-pdf-worker.js` deja junto al build (útil en
+ *     local y en plataformas que sí copian el archivo).
+ *  3. La del paquete `pdf-parse`, que sirve en desarrollo local.
  */
 function resolveWorkerPath(): string | undefined {
+  const embedded = materializeEmbeddedWorker();
+  if (embedded) return embedded;
   try {
     const bundled = require.resolve('./pdf.worker.mjs');
     if (existsSync(bundled)) return bundled;
   } catch {
-    // Sin copia (build sin el paso extra): seguimos con la opción 2.
+    // Sin copia (build sin el paso extra): seguimos con la opción 3.
   }
   try {
-    const delPaquete = join(dirname(require.resolve('pdf-parse')), 'pdf.worker.mjs');
+    const delPaquete = join(
+      dirname(require.resolve('pdf-parse')),
+      'pdf.worker.mjs',
+    );
     if (existsSync(delPaquete)) return delPaquete;
   } catch {
     // pdf-parse no resoluble: que pdf-parse use su valor por defecto.
@@ -286,7 +407,7 @@ function resolveWorkerPath(): string | undefined {
 }
 
 /** Apunta a pdf-parse a un worker que realmente exista en el runtime. */
-function applyPdfWorker(PDFParse: { setWorker?: (src?: string) => string }): void {
+function applyPdfWorker(PDFParse: PdfParseClass): void {
   const ruta = resolveWorkerPath();
   if (!ruta || typeof PDFParse?.setWorker !== 'function') return;
   try {
@@ -296,14 +417,27 @@ function applyPdfWorker(PDFParse: { setWorker?: (src?: string) => string }): voi
   }
 }
 
+/** Tipos mínimos de pdf-parse v2 (el paquete no publica declaraciones). */
+type PdfParseInstance = {
+  getText: () => Promise<{ text?: string } | undefined>;
+  destroy: () => Promise<void>;
+};
+
+type PdfParseClass = {
+  setWorker?: (src?: string) => string;
+  new (options: { data: Buffer }): PdfParseInstance;
+};
+
 /**
  * Extrae el texto de un PDF con pdf-parse v2 (clase `PDFParse`), garantizando el
  * runtime y el worker antes de leer. Lanza si el documento no se puede leer.
  */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   ensurePdfRuntime();
-  // pdf-parse v2 ya no es una función: expone la clase PDFParse.
-  const { PDFParse } = require('pdf-parse');
+  // pdf-parse v2 ya no es una función: expone la clase PDFParse. `require`
+  // literal para que el empaquetado (Vercel/file tracing) incluya el paquete.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PDFParse } = require('pdf-parse') as { PDFParse: PdfParseClass };
   applyPdfWorker(PDFParse);
   const parser = new PDFParse({ data: buffer });
   try {

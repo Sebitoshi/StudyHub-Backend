@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs'],
+    ignores: ['eslint.config.mjs', 'src/common/pdf-worker-content.ts'], // generado por scripts/embed-pdf-worker.js
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
