@@ -42,19 +42,30 @@ export class ChatWithImageDto {
   @IsObject()
   contenido!: Record<string, any>;
 
-  @ApiProperty({
-    description: 'Fase 2: prompt interno construido a partir del contenido.',
+  @ApiPropertyOptional({
+    description: 'Fase 2: prompt interno construido a partir del contenido (niveles normal, alto y máximo).',
     type: 'object',
     additionalProperties: true,
   })
+  @IsOptional()
   @IsObject()
-  promptInterno!: Record<string, any>;
+  promptInterno?: Record<string, any>;
 
-  @ApiProperty({
-    description: 'Fase 3: detalle elaborado con el prompt interno y el contenido.',
+  @ApiPropertyOptional({
+    description: 'Fase 3: detalle elaborado con el prompt interno y el contenido (niveles alto y máximo).',
     type: 'object',
     additionalProperties: true,
   })
+  @IsOptional()
   @IsObject()
-  detalle!: Record<string, any>;
+  detalle?: Record<string, any>;
+
+  @ApiPropertyOptional({
+    description: 'Nivel de análisis usado por el cliente (low, default, high o max).',
+    example: 'default',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  nivel?: string;
 }

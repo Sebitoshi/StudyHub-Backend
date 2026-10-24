@@ -47,6 +47,10 @@ export interface ImageDetailPhase {
   ejemplos: string[];
   posiblesPreguntas: string[];
   vacios: string[];
+  /** Solo en el nivel máximo: material extra de enseñanza. */
+  ejercicios?: Array<{ enunciado: string; solucion: string }>;
+  erroresComunes?: string[];
+  planEnsenanza?: string[];
 }
 
 export interface ImagePhaseMeta {
@@ -56,12 +60,14 @@ export interface ImagePhaseMeta {
   tokensUsados: number | null;
 }
 
-/** Resultado completo del pipeline de tres fases. */
+/** Resultado del pipeline de análisis (las fases 2 y 3 son opcionales). */
 export interface ImageAnalysisResult {
   filename?: string;
   contenido: ImageContentPhase;
-  promptInterno: InternalPromptPhase;
-  detalle: ImageDetailPhase;
+  promptInterno?: InternalPromptPhase;
+  detalle?: ImageDetailPhase;
+  /** Nivel declarado por el cliente (low, default, high o max). */
+  nivel?: string;
 }
 
 const VISION_SYSTEM_PROMPT = `Eres un extractor visual experto en material académico para StudyHub, una app de estudio para universitarios.
@@ -128,13 +134,36 @@ const DETAIL_JSON_SHAPE = `{
   "vacios": ["información que falta o queda ambigua en el contenido recibido"]
 }`;
 
+const DETAIL_MAX_SYSTEM_PROMPT = `${DETAIL_SYSTEM_PROMPT}
+
+Nivel MÁXIMO: además del detalle estándar, prepara material de enseñanza profundo para que el profesor pueda explicar y el estudiante practicar:
+- Ejemplos resueltos paso a paso, no genéricos.
+- Ejercicios con solución, graduados de menor a mayor dificultad.
+- Errores comunes y cómo evitarlos.
+- Un plan de enseñanza breve y accionable.`;
+
+const DETAIL_MAX_JSON_SHAPE = `{
+  "resumen": "resumen completo del contenido en 3-5 frases",
+  "ideasClave": ["ideas imprescindibles para entender el tema"],
+  "conceptos": [{ "termino": "concepto", "definicion": "definición clara y precisa" }],
+  "explicacionPasoAPaso": ["pasos ordenados para entender o resolver el contenido"],
+  "ejemplos": ["3 a 5 ejemplos resueltos paso a paso usando los datos del contenido"],
+  "posiblesPreguntas": ["preguntas de estudio o examen con respuesta deducible del contenido"],
+  "vacios": ["información que falta o queda ambigua en el contenido recibido"],
+  "ejercicios": [{ "enunciado": "ejercicio para practicar", "solucion": "resolución paso a paso" }],
+  "erroresComunes": ["errores típicos al estudiar o resolver este contenido y cómo evitarlos"],
+  "planEnsenanza": ["plan de 3 a 6 pasos para enseñar el tema"]
+}`;
+
 /**
- * Pipeline de comprensión de imágenes en tres fases:
+ * Pipeline de comprensión de imágenes en tres fases encadenadas:
  *
  *  1. Visión: extrae el contenido principal de la imagen.
  *  2. Prompt interno: convierte ese contenido en instrucciones de análisis.
  *  3. Detalle: explota el prompt + el contenido (sin volver a ver la imagen).
  *
+ * El cliente elige hasta qué fase llegar (rápido → máximo) y, en el nivel
+ * máximo, la fase 3 añade material de enseñanza extra en la misma llamada.
  * Cada fase es independiente y se expone en su propio endpoint, de modo que el
  * cliente puede mostrar los resultados a medida que llegan.
  */
@@ -270,10 +299,14 @@ export class ImageAnalysisService {
     };
   }
 
-  /** Fase 3 — detalle usando el prompt interno y el contenido (sin la imagen). */
+  /**
+   * Fase 3 — detalle usando el prompt interno y el contenido (sin la imagen).
+   * Con `profundidad: 'max'` la misma llamada añade material de enseñanza extra.
+   */
   async buildDetail(
     promptInternoRaw: Record<string, any>,
     contenidoRaw: Record<string, any>,
+    options: { profundidad?: string } = {},
   ): Promise<{ fase: 3; detalle: ImageDetailPhase; meta: ImagePhaseMeta }> {
     if (!promptInternoRaw || typeof promptInternoRaw !== 'object') {
       throw new BadRequestException('Falta el prompt interno de la fase 2.');
@@ -285,6 +318,7 @@ export class ImageAnalysisService {
     const startedAt = Date.now();
     const contenido = this.normalizeContent(contenidoRaw);
     const promptInterno = this.normalizeInternalPrompt(promptInternoRaw);
+    const maximo = (options.profundidad || '').trim().toLowerCase() === 'max';
 
     if (!contenido.contenidoPrincipal.trim()) {
       throw new BadRequestException(
@@ -300,18 +334,18 @@ export class ImageAnalysisService {
       JSON.stringify(contenido, null, 2),
       '',
       'Devuelve SOLO un objeto JSON con esta forma exacta:',
-      DETAIL_JSON_SHAPE,
+      maximo ? DETAIL_MAX_JSON_SHAPE : DETAIL_JSON_SHAPE,
     ].join('\n');
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: DETAIL_SYSTEM_PROMPT },
+      { role: 'system', content: maximo ? DETAIL_MAX_SYSTEM_PROMPT : DETAIL_SYSTEM_PROMPT },
       { role: 'user', content: instruction },
     ];
 
     const { data, tokensUsed, model } = await this.runPhase(3, messages, {
       // Se mantiene por debajo del límite OTPM (1000) del modelo de texto.
       maxTokens: 900,
-      temperature: 0.3,
+      temperature: maximo ? 0.35 : 0.3,
     });
 
     return {
@@ -394,6 +428,16 @@ export class ImageAnalysisService {
   }
 
   normalizeDetail(raw: any): ImageDetailPhase {
+    const ejercicios = this.exercises(
+      this.pick(raw, 'ejercicios', 'exercises', 'practica', 'practice'),
+    );
+    const erroresComunes = this.list(
+      this.pick(raw, 'erroresComunes', 'errores', 'commonMistakes', 'mistakes'),
+    );
+    const planEnsenanza = this.list(
+      this.pick(raw, 'planEnsenanza', 'plan', 'teachingPlan', 'lessonPlan'),
+    );
+
     return {
       resumen: this.text(this.pick(raw, 'resumen', 'summary')),
       ideasClave: this.list(this.pick(raw, 'ideasClave', 'ideas', 'keyIdeas')),
@@ -406,7 +450,40 @@ export class ImageAnalysisService {
         this.pick(raw, 'posiblesPreguntas', 'preguntas', 'questions', 'possibleQuestions'),
       ),
       vacios: this.list(this.pick(raw, 'vacios', 'gaps', 'missing')),
+      ...(ejercicios.length ? { ejercicios } : {}),
+      ...(erroresComunes.length ? { erroresComunes } : {}),
+      ...(planEnsenanza.length ? { planEnsenanza } : {}),
     };
+  }
+
+  private exercises(
+    value: unknown,
+    max = 20,
+  ): Array<{ enunciado: string; solucion: string }> {
+    if (!Array.isArray(value)) {
+      const single = this.text(value);
+      return single ? [{ enunciado: single, solucion: '' }] : [];
+    }
+
+    return value
+      .map((item) => {
+        if (typeof item === 'string') {
+          return { enunciado: item.trim(), solucion: '' };
+        }
+        if (item && typeof item === 'object') {
+          return {
+            enunciado: this.text(
+              this.pick(item, 'enunciado', 'pregunta', 'ejercicio', 'problem', 'question'),
+            ),
+            solucion: this.text(
+              this.pick(item, 'solucion', 'solución', 'solution', 'respuesta', 'answer'),
+            ),
+          };
+        }
+        return { enunciado: '', solucion: '' };
+      })
+      .filter((item) => item.enunciado || item.solucion)
+      .slice(0, max);
   }
 
   private pick(source: any, ...keys: string[]): unknown {

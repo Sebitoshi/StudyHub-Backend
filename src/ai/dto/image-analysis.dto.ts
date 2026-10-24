@@ -36,4 +36,14 @@ export class ImageDetailDto extends InternalPromptDto {
   })
   @IsObject()
   promptInterno!: Record<string, any>;
+
+  @ApiPropertyOptional({
+    description:
+      'Profundidad del detalle: "max" añade ejercicios, errores comunes y plan de enseñanza.',
+    example: 'max',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  profundidad?: string;
 }

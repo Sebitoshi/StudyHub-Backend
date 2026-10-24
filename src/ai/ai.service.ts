@@ -30,6 +30,28 @@ function truncateText(text: string, max: number): string {
   return clean.length > max ? `${clean.slice(0, max).trim()}…` : clean;
 }
 
+const IMAGE_LEVELS: Record<number, { nivel: string; etiqueta: string }> = {
+  1: { nivel: 'low', etiqueta: 'rápido' },
+  2: { nivel: 'default', etiqueta: 'normal' },
+  3: { nivel: 'high', etiqueta: 'detallado' },
+};
+
+/** Fases realmente ejecutadas y etiqueta del nivel elegido por el estudiante. */
+function imageDepthInfo(analysis: ImageAnalysisResult): {
+  fases: number;
+  nivel: string;
+  etiqueta: string;
+} {
+  const fases =
+    1 + (analysis.promptInterno ? 1 : 0) + (analysis.detalle ? 1 : 0);
+
+  // El nivel máximo usa las mismas 3 fases, pero la fase 3 trae material extra.
+  if (fases === 3 && analysis.nivel === 'max') {
+    return { fases, nivel: 'max', etiqueta: 'máximo' };
+  }
+  return { fases, ...(IMAGE_LEVELS[fases] || IMAGE_LEVELS[1]) };
+}
+
 /**
  * Material completo que recibe el profesor en el turno actual. Incluye la
  * instrucción pedagógica: usar el análisis para enseñar, no para transcribir.
@@ -38,18 +60,34 @@ function formatImageMaterial(analysis: ImageAnalysisResult): string {
   const c = analysis.contenido;
   const p = analysis.promptInterno;
   const d = analysis.detalle;
+  const depth = imageDepthInfo(analysis);
 
   const lines: string[] = [
-    'El estudiante adjuntó una imagen y el sistema ya la analizó en tres fases.',
+    `El estudiante adjuntó una imagen y el sistema ya la analizó en ${depth.fases} ${
+      depth.fases === 1 ? 'fase' : 'fases'
+    } (nivel ${depth.etiqueta}).`,
     'Usa este material para ENSEÑAR (explicar, conectar, comprobar comprensión), no para transcribirlo tal cual.',
     'Si contiene un ejercicio y el estudiante no pidió la solución, guía con preguntas y pistas.',
+  ];
+
+  if (depth.fases === 1) {
+    lines.push(
+      'El análisis es breve: trabaja solo con lo que aparece aquí. Si falta información, dilo y pide una imagen más clara o un enfoque más detallado; no inventes detalles.',
+    );
+  } else if (depth.fases === 2) {
+    lines.push(
+      'El análisis es intermedio: no hay un detalle fase 3. Profundiza con lo disponible y señala lo que no se puede deducir de la imagen.',
+    );
+  }
+
+  lines.push(
     '',
     `IMAGEN: ${analysis.filename || 'imagen'}`,
     `Título: ${c.titulo} · Tipo: ${c.tipoContenido} · Tema: ${c.tema} · Nivel: ${c.nivelDificultad}`,
     '',
     'CONTENIDO PRINCIPAL (fase 1):',
     truncateText(c.contenidoPrincipal, 2200),
-  ];
+  );
 
   if (c.textoDetectado) {
     lines.push('', 'TEXTO DETECTADO:', truncateText(c.textoDetectado, 1400));
@@ -57,26 +95,52 @@ function formatImageMaterial(analysis: ImageAnalysisResult): string {
   if (c.elementosClave.length) {
     lines.push('', 'ELEMENTOS CLAVE: ' + c.elementosClave.join('; '));
   }
-  if (p.promptInterno) {
+  if (p?.promptInterno) {
     lines.push('', 'PROMPT INTERNO (fase 2, guía de análisis):', truncateText(p.promptInterno, 700));
   }
-  if (p.preguntasGuia.length) {
+  if (p?.preguntasGuia.length) {
     lines.push('', 'PREGUNTAS GUÍA: ' + p.preguntasGuia.join(' | '));
   }
 
-  lines.push('', 'DETALLE YA ELABORADO (fase 3):');
-  if (d.resumen) lines.push('Resumen: ' + d.resumen);
-  if (d.ideasClave.length) lines.push('Ideas clave: ' + d.ideasClave.join('; '));
-  if (d.conceptos.length) {
-    lines.push(
-      'Conceptos: ' +
-        d.conceptos.map((x) => `${x.termino}: ${x.definicion}`).join(' | '),
-    );
+  if (d) {
+    lines.push('', 'DETALLE YA ELABORADO (fase 3):');
+    if (d.resumen) lines.push('Resumen: ' + d.resumen);
+    if (d.ideasClave.length) lines.push('Ideas clave: ' + d.ideasClave.join('; '));
+    if (d.conceptos.length) {
+      lines.push(
+        'Conceptos: ' +
+          d.conceptos.map((x) => `${x.termino}: ${x.definicion}`).join(' | '),
+      );
+    }
+    if (d.explicacionPasoAPaso.length) {
+      lines.push('Pasos: ' + d.explicacionPasoAPaso.join(' | '));
+    }
+    if (d.ejemplos?.length) {
+      lines.push('Ejemplos: ' + d.ejemplos.join(' | '));
+    }
+    if (d.posiblesPreguntas?.length) {
+      lines.push('Preguntas de estudio: ' + d.posiblesPreguntas.join(' | '));
+    }
+    if (d.vacios.length) lines.push('Vacíos detectados: ' + d.vacios.join(' | '));
+
+    if (depth.nivel === 'max') {
+      lines.push('', 'MATERIAL EXTRA (nivel máximo):');
+      if (d.ejercicios?.length) {
+        lines.push(
+          'Ejercicios: ' +
+            d.ejercicios
+              .map((x) => `${x.enunciado} → ${x.solucion || 'sin solución'}`)
+              .join(' | '),
+        );
+      }
+      if (d.erroresComunes?.length) {
+        lines.push('Errores comunes: ' + d.erroresComunes.join(' | '));
+      }
+      if (d.planEnsenanza?.length) {
+        lines.push('Plan de enseñanza: ' + d.planEnsenanza.join(' → '));
+      }
+    }
   }
-  if (d.explicacionPasoAPaso.length) {
-    lines.push('Pasos: ' + d.explicacionPasoAPaso.join(' | '));
-  }
-  if (d.vacios.length) lines.push('Vacíos detectados: ' + d.vacios.join(' | '));
 
   return truncateText(lines.join('\n'), MAX_IMAGE_MATERIAL_CHARS);
 }
@@ -85,22 +149,33 @@ function formatImageMaterial(analysis: ImageAnalysisResult): string {
 function formatImageDigest(analysis: ImageAnalysisResult): string {
   const c = analysis.contenido;
   const d = analysis.detalle;
+  const depth = imageDepthInfo(analysis);
 
   const parts = [
+    `Análisis: nivel ${depth.etiqueta} (${depth.fases} ${depth.fases === 1 ? 'fase' : 'fases'})`,
     `Título: ${c.titulo} | Tema: ${c.tema} | Tipo: ${c.tipoContenido}`,
     c.contenidoPrincipal
       ? `Contenido: ${truncateText(c.contenidoPrincipal, 800)}`
       : '',
-    d.resumen ? `Resumen: ${truncateText(d.resumen, 400)}` : '',
-    d.ideasClave.length ? `Ideas clave: ${d.ideasClave.slice(0, 8).join('; ')}` : '',
-    d.conceptos.length
+    d?.resumen ? `Resumen: ${truncateText(d.resumen, 400)}` : '',
+    d?.ideasClave.length ? `Ideas clave: ${d.ideasClave.slice(0, 8).join('; ')}` : '',
+    d?.conceptos.length
       ? `Conceptos: ${d.conceptos
           .slice(0, 8)
           .map((x) => `${x.termino}: ${x.definicion}`)
           .join(' | ')}`
       : '',
-    d.explicacionPasoAPaso.length
+    d?.explicacionPasoAPaso.length
       ? `Pasos: ${d.explicacionPasoAPaso.slice(0, 8).join(' | ')}`
+      : '',
+    d?.ejercicios?.length
+      ? `Ejercicios: ${d.ejercicios
+          .slice(0, 4)
+          .map((x) => x.enunciado)
+          .join(' | ')}`
+      : '',
+    d?.erroresComunes?.length
+      ? `Errores comunes: ${d.erroresComunes.slice(0, 4).join('; ')}`
       : '',
   ].filter(Boolean);
 
@@ -177,10 +252,11 @@ export class AiService {
   }
 
   /**
-   * Conversa con el Profesor IA usando una imagen ya analizada en tres fases.
-   * La imagen no se reenvía: se guarda un resumen del análisis como adjunto del
-   * mensaje (para los turnos siguientes) y se inyecta el material completo en el
-   * prompt del turno actual.
+   * Conversa con el Profesor IA usando una imagen ya analizada. El cliente elige
+   * hasta qué fase analizarla (rápido → máximo), así que las fases 2 y 3 son
+   * opcionales. La imagen no se reenvía: se guarda un resumen del análisis como
+   * adjunto del mensaje (para los turnos siguientes) y se inyecta el material
+   * completo en el prompt del turno actual.
    */
   async chatWithImage(
     userId: number,
@@ -190,19 +266,34 @@ export class AiService {
     raw: {
       filename?: string;
       contenido: Record<string, any>;
-      promptInterno: Record<string, any>;
-      detalle: Record<string, any>;
+      promptInterno?: Record<string, any>;
+      detalle?: Record<string, any>;
+      nivel?: string;
     },
   ) {
     const conv = await this.ensureConversation(userId, conversationId);
     if (!conv) throw new Error('Failed to create or fetch conversation');
 
+    const hasObject = (value: unknown) =>
+      !!value && typeof value === 'object' && Object.keys(value as object).length > 0;
+
+    const nivelRaw = String(raw.nivel || '').trim().toLowerCase();
+    const nivel = ['low', 'default', 'high', 'max'].includes(nivelRaw)
+      ? nivelRaw
+      : undefined;
+
     const analysis: ImageAnalysisResult = {
       filename: (raw.filename || 'imagen').slice(0, 300),
       contenido: this.imageAnalysis.normalizeContent(raw.contenido),
-      promptInterno: this.imageAnalysis.normalizeInternalPrompt(raw.promptInterno),
-      detalle: this.imageAnalysis.normalizeDetail(raw.detalle),
+      ...(hasObject(raw.promptInterno)
+        ? { promptInterno: this.imageAnalysis.normalizeInternalPrompt(raw.promptInterno) }
+        : {}),
+      ...(hasObject(raw.detalle)
+        ? { detalle: this.imageAnalysis.normalizeDetail(raw.detalle) }
+        : {}),
+      ...(nivel ? { nivel } : {}),
     };
+    const depth = imageDepthInfo(analysis);
 
     const userText =
       (question || '').trim() || 'Explícame esta imagen y ayúdame a entenderla.';
@@ -213,6 +304,8 @@ export class AiService {
       filename: analysis.filename,
       titulo: analysis.contenido.titulo,
       tema: analysis.contenido.tema,
+      fases: depth.fases,
+      nivel: depth.nivel,
       digest: formatImageDigest(analysis),
       createdAt: new Date(),
     };
@@ -246,7 +339,9 @@ export class AiService {
       imageAnalysis: {
         titulo: analysis.contenido.titulo,
         tema: analysis.contenido.tema,
-        resumen: analysis.detalle.resumen,
+        resumen: analysis.detalle?.resumen || analysis.contenido.contenidoPrincipal,
+        fases: depth.fases,
+        nivel: depth.nivel,
       },
     };
   }
@@ -371,10 +466,13 @@ export class AiService {
     const history = await historyCursor.toArray();
     const conversationContext = history.map((m) => {
       const imageDigest = this.imageAttachmentDigest(m);
+      const imageFases = this.imageAttachmentPhases(m);
       return {
         role: m.role,
         content: imageDigest
-          ? `${m.content}\n\n[Imagen adjunta analizada en 3 fases]\n${imageDigest}`
+          ? `${m.content}\n\n[Imagen adjunta analizada en ${imageFases} ${
+              imageFases === 1 ? 'fase' : 'fases'
+            }]\n${imageDigest}`
           : m.content,
       };
     });
@@ -478,6 +576,16 @@ export class AiService {
       .map((attachment: any) => String(attachment.digest || '').trim())
       .filter(Boolean)
       .join('\n\n');
+  }
+
+  /** Fases con las que se analizó la imagen adjunta (3 si es historial antiguo). */
+  private imageAttachmentPhases(message: any): number {
+    if (!Array.isArray(message?.attachments)) return 3;
+    const attachment = message.attachments.find(
+      (item: any) => item?.type === 'image-analysis',
+    );
+    const fases = Number(attachment?.fases);
+    return Number.isFinite(fases) && fases >= 1 && fases <= 4 ? fases : 3;
   }
 
   private async finalizeInteraction(userId: number, conversationId: any, message: string, prep: any, sessionStartedAt: Date) {

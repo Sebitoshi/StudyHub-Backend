@@ -56,7 +56,7 @@ export class AiController {
   @Post('chat/image')
   @ApiOperation({
     summary:
-      'Conversar con el Profesor IA a partir de una imagen ya analizada en tres fases',
+      'Conversar con el Profesor IA a partir de una imagen ya analizada (niveles rápido a máximo)',
   })
   @ApiBody({ type: ChatWithImageDto })
   async chatWithImage(@Req() req: any, @Body() dto: ChatWithImageDto) {
@@ -541,7 +541,9 @@ export class AiController {
   })
   @ApiBody({ type: ImageDetailDto })
   async buildImageDetail(@Body() dto: ImageDetailDto) {
-    return this.imageAnalysis.buildDetail(dto.promptInterno, dto.contenido);
+    return this.imageAnalysis.buildDetail(dto.promptInterno, dto.contenido, {
+      profundidad: dto.profundidad,
+    });
   }
 
   /**
