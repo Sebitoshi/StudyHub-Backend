@@ -197,7 +197,8 @@ export class ImageAnalysisService {
 
     const { data, tokensUsed, model } = await this.runPhase(1, messages, {
       model: this.visionModel,
-      maxTokens: 3400,
+      // El tier gratuito de Groq limita la salida a 1000 tokens por minuto (OTPM).
+      maxTokens: 900,
       temperature: 0.1,
     });
 
@@ -252,7 +253,8 @@ export class ImageAnalysisService {
     ];
 
     const { data, tokensUsed, model } = await this.runPhase(2, messages, {
-      maxTokens: 2200,
+      // Se mantiene por debajo del límite OTPM (1000) del modelo de texto.
+      maxTokens: 900,
       temperature: 0.3,
     });
 
@@ -307,7 +309,8 @@ export class ImageAnalysisService {
     ];
 
     const { data, tokensUsed, model } = await this.runPhase(3, messages, {
-      maxTokens: 4000,
+      // Se mantiene por debajo del límite OTPM (1000) del modelo de texto.
+      maxTokens: 900,
       temperature: 0.3,
     });
 

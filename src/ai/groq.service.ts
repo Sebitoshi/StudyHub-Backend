@@ -133,6 +133,8 @@ export class GroqService {
           /(not supported|unsupported|not valid|invalid|does not support|doesn't support|only supported).{0,60}(response_format|json)/i.test(
             message,
           );
+        const rateLimited =
+          /rate_limit|request too large|output tokens per minute|OTPM/i.test(message);
         const tokenLimitExceeded =
           /max_tokens|maximum.{0,20}(token|context)|exceeds.{0,20}limit|tokens per minute|\bTPM\b|rate_limit|request too large|reduce your message/i.test(
             message,
@@ -143,6 +145,20 @@ export class GroqService {
             `Model ${options?.model || this.model} does not support JSON mode; retrying without it.`,
           );
           jsonMode = false;
+        } else if (rateLimited) {
+          // Límite de tokens de salida por minuto (OTPM). No sirve reintentar con
+          // el mismo max_tokens: se recorta por debajo del límite y se espera a
+          // que se reinicie la ventana (Groq lo indica en las cabeceras).
+          const limitMatch = message.match(/output tokens per minute \(OTPM\)[^]*?Limit\s+(\d+)/i);
+          const limit = Number(limitMatch?.[1]) || 1000;
+          const safe = Math.max(256, Math.min(900, limit - 100));
+          if (maxTokens > safe) maxTokens = safe;
+
+          const waitSeconds = this.rateLimitResetSeconds(err);
+          this.logger.warn(
+            `Límite OTPM alcanzado (${limit}); reintentando con maxTokens=${maxTokens} en ${waitSeconds}s.`,
+          );
+          await new Promise((r) => setTimeout(r, waitSeconds * 1000 + 400));
         } else if (tokenLimitExceeded && maxTokens > 1024) {
           // Límite de tokens/TPM alcanzado (ej. 413): recortar max_tokens y reintentar
           maxTokens = Math.max(1024, maxTokens - 2048);
@@ -166,6 +182,29 @@ export class GroqService {
     }
 
     throw lastError;
+  }
+
+  /**
+   * Segundos que hay que esperar para que Groq reinicie la ventana de tokens.
+   * Se lee de las cabeceras de la respuesta 429 y se acota para no bloquear la
+   * función más de la cuenta.
+   */
+  private rateLimitResetSeconds(err: any): number {
+    const header =
+      err?.headers?.get?.('x-ratelimit-reset-tokens') ??
+      err?.headers?.['x-ratelimit-reset-tokens'];
+    if (typeof header === 'string') {
+      const match = header.match(/([\d.]+)\s*s/i);
+      if (match) return Math.min(30, Math.ceil(Number(match[1])));
+    }
+
+    const retryAfter =
+      err?.headers?.get?.('retry-after') ?? err?.headers?.['retry-after'];
+    if (retryAfter !== undefined && !Number.isNaN(Number(retryAfter))) {
+      return Math.min(30, Math.max(1, Number(retryAfter)));
+    }
+
+    return 12;
   }
 
   private parseJsonContent(raw: string): any {

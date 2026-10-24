@@ -298,7 +298,7 @@ export class AiService {
   private async chatForProfessor(messages: any[]) {
     const fallbackModel = (process.env.GROQ_MODEL || 'openai/gpt-oss-120b').trim();
     const preferredModel = (process.env.GROQ_CHAT_MODEL || 'openai/gpt-oss-120b').trim();
-    const options = { maxTokens: 1200 };
+    const options = { maxTokens: 900 };
 
     try {
       return await this.groq.chat(messages, { ...options, model: preferredModel });
