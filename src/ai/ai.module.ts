@@ -32,6 +32,7 @@ import { KnowledgeGapsModule } from './knowledge-gaps/knowledge-gaps.module';
 import { LearningAnalyticsRepository } from './learning-analytics/learning-analytics.repository';
 import { LearningAnalyticsService } from './learning-analytics/learning-analytics.service';
 import { JobMatchingService } from './job-matching/job-matching.service';
+import { NotesAssistantService } from './notes/notes-assistant.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
@@ -72,6 +73,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     LearningPathsService,
     AdaptiveSessionsRepository,
     AdaptiveSessionsService,
+    NotesAssistantService,
   ],
   exports: [
     AiService,
@@ -82,6 +84,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     AdaptiveLearningService,
     ResourceGeneratorService,
     ExamCoachService,
+    NotesAssistantService,
     KnowledgeGapsModule,
     MongoModule,
   ],

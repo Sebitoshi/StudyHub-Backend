@@ -13,6 +13,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { NotesAssistantService } from '../ai/notes/notes-assistant.service';
 import { SubjectsService } from './subjects.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
@@ -22,6 +23,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { CreateNoteDto } from './dto/create-note.dto';
 import { UpdateNoteDto } from './dto/update-note.dto';
+import { NoteAssistantDto } from './dto/note-assistant.dto';
 
 @ApiTags('Subjects')
 @ApiBearerAuth()
@@ -30,7 +32,10 @@ import { UpdateNoteDto } from './dto/update-note.dto';
 export class SubjectsController {
   private readonly logger = new Logger(SubjectsController.name);
 
-  constructor(private readonly subjectsService: SubjectsService) {}
+  constructor(
+    private readonly subjectsService: SubjectsService,
+    private readonly notesAssistant: NotesAssistantService,
+  ) {}
 
   // ─── Subjects ─────────────────────────────────────
 
@@ -217,6 +222,22 @@ export class SubjectsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.subjectsService.findNotes(id, user.id);
+  }
+
+  @Post(':id/notes/assistant')
+  @ApiOperation({
+    summary:
+      'Generar una propuesta de IA para un apunte (borrador, continuar, mejorar, resumir o esquema)',
+  })
+  @ApiResponse({ status: 201, description: 'Propuesta generada (no se guarda automáticamente)' })
+  @ApiResponse({ status: 400, description: 'Falta contenido o indicación para la acción' })
+  async assistNote(
+    @CurrentUser() user: { id: number },
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: NoteAssistantDto,
+  ) {
+    const subject = await this.subjectsService.findSubjectBrief(id, user.id);
+    return this.notesAssistant.suggest({ ...dto, subjectName: subject.nombre });
   }
 
   @Put(':id/notes/:noteId')

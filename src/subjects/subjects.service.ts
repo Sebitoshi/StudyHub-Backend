@@ -205,6 +205,12 @@ export class SubjectsService {
     return { message: 'Tarea eliminada' };
   }
 
+  /** Datos mínimos de una materia propia, para el asistente de apuntes. */
+  async findSubjectBrief(subjectId: number, userId: number) {
+    const subject = await this.findSubjectOrThrow(subjectId, userId);
+    return { id: subject.id, nombre: subject.nombre };
+  }
+
   // ─── Notes ────────────────────────────────────────
 
   async createNote(subjectId: number, userId: number, dto: CreateNoteDto) {
