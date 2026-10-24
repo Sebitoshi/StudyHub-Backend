@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Collection, ObjectId } from 'mongodb';
 import { CONVERSATIONS_COLLECTION, MESSAGES_COLLECTION } from './mongo.provider';
 import { GroqService } from './groq.service';
@@ -226,7 +226,15 @@ export class AiService {
       formatImageMaterial(analysis),
     );
 
-    const response = await this.groq.chat(messagesForModel);
+    let response: { content: string; tokensUsed?: number; model?: string };
+    try {
+      response = await this.chatForProfessor(messagesForModel);
+    } catch (err) {
+      this.logger.error('Professor image reply failed: ' + err);
+      throw new ServiceUnavailableException(
+        'El profesor no pudo responder con la imagen en este momento. Inténtalo de nuevo en unos segundos.',
+      );
+    }
     await this.persistAssistantMessage(conv._id, userId, response.content, response.tokensUsed, response.model);
     await this.autoGenerateTitle(conv, userText);
 
@@ -277,6 +285,41 @@ export class AiService {
     await this.finalizeInteraction(userId, conv._id, message, prep, sessionStartedAt);
 
     return { conversationId: conv._id, reply: finalContent };
+  }
+
+  /**
+   * Respuesta del profesor cuando enseña a partir de una imagen.
+   *
+   * Las tres fases de la imagen ya consumieron la cuota de tokens de salida por
+   * minuto (OTPM) del modelo multimodal. Para no chocar con ese límite se usa un
+   * modelo de texto (`GROQ_CHAT_MODEL`, por defecto `openai/gpt-oss-120b`) y, si
+   * no está disponible o está limitado, se reintenta con el modelo por defecto.
+   */
+  private async chatForProfessor(messages: any[]) {
+    const fallbackModel = (process.env.GROQ_MODEL || 'openai/gpt-oss-120b').trim();
+    const preferredModel = (process.env.GROQ_CHAT_MODEL || 'openai/gpt-oss-120b').trim();
+    const options = { maxTokens: 1200 };
+
+    try {
+      return await this.groq.chat(messages, { ...options, model: preferredModel });
+    } catch (err: any) {
+      const status = err?.status ?? err?.response?.status;
+      const message = String(err?.message || '');
+      const rateLimited = status === 429 || /rate_limit|429/.test(message);
+      const unavailable =
+        status === 404 ||
+        /model_not_found|not found|decommissioned|does not exist/i.test(message);
+
+      if (!rateLimited && !unavailable) throw err;
+
+      this.logger.warn(
+        `El modelo ${preferredModel} no pudo responder (${status || 'sin estado'}); ` +
+          `reintentando con ${fallbackModel}`,
+      );
+      // La ventana de OTPM se reinicia en ~12 s según las cabeceras de Groq.
+      if (rateLimited) await new Promise((resolve) => setTimeout(resolve, 13000));
+      return this.groq.chat(messages, { ...options, model: fallbackModel });
+    }
   }
 
   private async persistUserMessage(
