@@ -17,6 +17,8 @@ import { UpdateTeacherProfileDto } from './dto/update-teacher-profile.dto';
 import { GenerateQuizDto } from './dto/generate-quiz.dto';
 import { GenerateFlashcardsDto } from './dto/generate-flashcards.dto';
 import { ExplainAnswerDto } from './dto/explain-answer.dto';
+import { ImageDetailDto, InternalPromptDto } from './dto/image-analysis.dto';
+import { ImageAnalysisService } from './image-analysis.service';
 import { ObjectId } from 'mongodb';
 import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
@@ -37,6 +39,7 @@ export class AiController {
     private readonly generatedResources: GeneratedResourcesService,
     private readonly learningGoals: LearningGoalsService,
     private readonly teacherProfiles: TeacherProfileService,
+    private readonly imageAnalysis: ImageAnalysisService,
   ) {}
 
   @Post('chat')
@@ -469,6 +472,59 @@ export class AiController {
   async explainAnswer(@Body() dto: ExplainAnswerDto) {
     const result = await this.ai.explainAnswer(dto);
     return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Comprensión de imágenes en tres fases (visión → prompt interno → detalle).
+  // Cada fase tiene su endpoint para que el cliente las muestre a medida que llegan.
+  // ---------------------------------------------------------------------------
+
+  @Post('images/content')
+  @ApiOperation({
+    summary: 'Fase 1: extraer el contenido principal de una imagen (modelo de visión)',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { image: { type: 'string', format: 'binary' } },
+      required: ['image'],
+    },
+  })
+  @ApiQuery({ name: 'idioma', required: false, example: 'es' })
+  @ApiQuery({
+    name: 'enfoque',
+    required: false,
+    description: 'En qué debe centrarse el análisis (p. ej. "examen", "resumen", "clase").',
+  })
+  @UseInterceptors(FileInterceptor('image', { limits: { fileSize: 6 * 1024 * 1024 } }))
+  async analyzeImageContent(
+    @UploadedFile() image: Express.Multer.File,
+    @Query('idioma') idioma?: string,
+    @Query('enfoque') enfoque?: string,
+  ) {
+    return this.imageAnalysis.extractContent(image, { idioma, enfoque });
+  }
+
+  @Post('images/internal-prompt')
+  @ApiOperation({
+    summary: 'Fase 2: construir un prompt interno a partir del contenido de la fase 1',
+  })
+  @ApiBody({ type: InternalPromptDto })
+  async buildImageInternalPrompt(@Body() dto: InternalPromptDto) {
+    return this.imageAnalysis.buildInternalPrompt(dto.contenido, {
+      idioma: dto.idioma,
+      enfoque: dto.enfoque,
+    });
+  }
+
+  @Post('images/detail')
+  @ApiOperation({
+    summary: 'Fase 3: obtener el detalle usando el prompt interno y el contenido (sin la imagen)',
+  })
+  @ApiBody({ type: ImageDetailDto })
+  async buildImageDetail(@Body() dto: ImageDetailDto) {
+    return this.imageAnalysis.buildDetail(dto.promptInterno, dto.contenido);
   }
 
   /**

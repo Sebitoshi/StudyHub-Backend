@@ -33,6 +33,7 @@ import { LearningAnalyticsRepository } from './learning-analytics/learning-analy
 import { LearningAnalyticsService } from './learning-analytics/learning-analytics.service';
 import { JobMatchingService } from './job-matching/job-matching.service';
 import { NotesAssistantService } from './notes/notes-assistant.service';
+import { ImageAnalysisService } from './image-analysis.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
@@ -74,6 +75,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     AdaptiveSessionsRepository,
     AdaptiveSessionsService,
     NotesAssistantService,
+    ImageAnalysisService,
   ],
   exports: [
     AiService,

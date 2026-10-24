@@ -1,10 +1,26 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+/** Parte de un mensaje multimodal (texto o imagen). */
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+export type ChatContent = string | ChatContentPart[];
+
+export interface ChatMessage {
+  role: string;
+  content: ChatContent;
+}
+
 interface ChatOptions {
   /** Solicitar la respuesta como JSON válido (response_format json_object). */
   json?: boolean;
   /** Límite de tokens de salida (max_tokens). */
   maxTokens?: number;
+  /** Modelo para esta llamada (p. ej. el modelo multimodal de visión). */
+  model?: string;
+  /** Temperatura de muestreo (0 = determinista). */
+  temperature?: number;
 }
 
 @Injectable()
@@ -37,19 +53,22 @@ export class GroqService {
   }
 
   async chat(
-    messages: Array<{ role: string; content: string }>,
+    messages: ChatMessage[],
     options?: ChatOptions,
   ): Promise<{ content: string; tokensUsed?: number; model?: string }> {
     if (!this.client) {
       throw new Error('Groq client not initialized');
     }
 
+    const model = options?.model || this.model;
+
     try {
       const params: any = {
-        model: this.model,
+        model,
         messages,
         ...(options?.json ? { response_format: { type: 'json_object' } } : {}),
         ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {}),
+        ...(options?.temperature !== undefined ? { temperature: options.temperature } : {}),
       };
 
       const response = await this.client.chat.completions.create(params);
@@ -63,7 +82,7 @@ export class GroqService {
       const tokensUsed =
         response?.usage?.total_tokens ?? response?.usage?.totalTokens ?? null;
 
-      return { content, tokensUsed, model: this.model };
+      return { content, tokensUsed, model };
     } catch (err) {
       this.logger.error('Groq API call failed: ' + err);
       throw err;
@@ -84,13 +103,16 @@ export class GroqService {
    *   en cada intento.
    */
   async chatJson(
-    messages: Array<{ role: string; content: string }>,
+    messages: ChatMessage[],
+    options?: ChatOptions,
   ): Promise<{ data: any; tokensUsed?: number; model?: string }> {
     const maxAttempts = 3;
     let jsonMode = true;
     // Default 6000 (cabe en el TPM 8000 del tier gratuito dejando margen para el input).
     // Techo de 7500 para que un valor alto en el env no reproduzca el 413.
-    let maxTokens = Math.min(Number(process.env.GROQ_MAX_TOKENS) || 6000, 7500);
+    let maxTokens =
+      options?.maxTokens ??
+      Math.min(Number(process.env.GROQ_MAX_TOKENS) || 6000, 7500);
     let lastError: any;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -98,6 +120,8 @@ export class GroqService {
         const response = await this.chat(messages, {
           json: jsonMode,
           maxTokens,
+          model: options?.model,
+          temperature: options?.temperature,
         });
         const data = this.parseJsonContent(response.content);
         return { data, tokensUsed: response.tokensUsed, model: response.model };
@@ -116,7 +140,7 @@ export class GroqService {
 
         if (jsonMode && jsonModeUnsupported) {
           this.logger.warn(
-            `Model ${this.model} does not support JSON mode; retrying without it.`,
+            `Model ${options?.model || this.model} does not support JSON mode; retrying without it.`,
           );
           jsonMode = false;
         } else if (tokenLimitExceeded && maxTokens > 1024) {
@@ -329,7 +353,7 @@ export class GroqService {
    * Returns true if streaming was used, false otherwise.
    */
   async stream(
-    messages: Array<{ role: string; content: string }>,
+    messages: ChatMessage[],
     onChunk: (chunk: string) => Promise<void> | void,
   ): Promise<boolean> {
     if (!this.client) throw new Error('Groq client not initialized');
