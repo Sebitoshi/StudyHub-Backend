@@ -18,6 +18,7 @@ import { AcademicRiskModule } from './academic-risk/academic-risk.module';
 import { StudyTimerModule } from './study-timer/study-timer.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { SandboxModule } from './sandbox/sandbox.module';
+import { MediaModule } from './media/media.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { SandboxModule } from './sandbox/sandbox.module';
     StudyTimerModule,
     CalendarModule,
     SandboxModule,
+    MediaModule,
   ],
 })
 export class AppModule {}

@@ -1,9 +1,4 @@
-import {
-  IsDateString,
-  IsOptional,
-  IsString,
-  IsUrl,
-} from 'class-validator';
+import { IsDateString, IsOptional, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdatePersonalInfoDto {
@@ -17,10 +12,7 @@ export class UpdatePersonalInfoDto {
   @IsString()
   apellido?: string;
 
-  @ApiPropertyOptional({ description: 'URL de la foto de perfil', example: 'https://example.com/foto.jpg' })
-  @IsOptional()
-  @IsString()
-  foto?: string;
+  // La foto no se acepta por URL: se sube por /media/images/chunk y se guarda en MongoDB.
 
   @ApiPropertyOptional({ description: 'URL del banner de perfil', example: 'https://example.com/banner.jpg' })
   @IsOptional()
