@@ -259,6 +259,7 @@ export class AuthService {
     email: string;
     nombre: string;
     apellido: string;
+    foto?: string | null;
   }) {
     const payload = { sub: user.id, email: user.email };
 
@@ -269,6 +270,7 @@ export class AuthService {
         nombre: user.nombre,
         apellido: user.apellido,
         email: user.email,
+        foto: user.foto ?? null,
       },
     };
   }

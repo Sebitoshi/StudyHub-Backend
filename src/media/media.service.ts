@@ -61,6 +61,9 @@ export interface AvatarPayload {
 @Injectable()
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
+  /** Caché por instancia: evita ir a Mongo en cada carga de avatar. */
+  private readonly avatarCache = new Map<string, AvatarPayload>();
+  private readonly AVATAR_CACHE_LIMIT = 200;
 
   constructor(
     private readonly repo: MediaRepository,
@@ -263,18 +266,33 @@ export class MediaService {
       throw new NotFoundException('Imagen no encontrada.');
     }
 
+    const cached = this.avatarCache.get(imageId);
+    if (cached) return cached;
+
     const image = await this.repo.getImageById(new ObjectId(imageId));
     if (!image || image.kind !== AVATAR_KIND) {
       throw new NotFoundException('Imagen no encontrada.');
     }
 
-    return { data: image.data, mime: image.mime, bytes: image.bytes, hash: image.hash };
+    const payload: AvatarPayload = {
+      data: image.data,
+      mime: image.mime,
+      bytes: image.bytes,
+      hash: image.hash,
+    };
+    if (this.avatarCache.size >= this.AVATAR_CACHE_LIMIT) {
+      const oldest = this.avatarCache.keys().next().value;
+      if (oldest) this.avatarCache.delete(oldest);
+    }
+    this.avatarCache.set(imageId, payload);
+    return payload;
   }
 
   async removeAvatar(userId: number): Promise<{ ok: boolean; foto: null }> {
     const existing = await this.repo.getImageForUser(userId, AVATAR_KIND);
     if (existing) {
       await this.repo.deleteImageById(existing._id);
+      this.avatarCache.delete(existing._id.toHexString());
     }
     await this.prisma.user.update({ where: { id: userId }, data: { foto: null } });
     return { ok: true, foto: null };
