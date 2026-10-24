@@ -18,6 +18,7 @@ import { GenerateQuizDto } from './dto/generate-quiz.dto';
 import { GenerateFlashcardsDto } from './dto/generate-flashcards.dto';
 import { ExplainAnswerDto } from './dto/explain-answer.dto';
 import { ImageDetailDto, InternalPromptDto } from './dto/image-analysis.dto';
+import { ChatWithImageDto } from './dto/chat-with-image.dto';
 import { ImageAnalysisService } from './image-analysis.service';
 import { ObjectId } from 'mongodb';
 import type { Response } from 'express';
@@ -50,6 +51,22 @@ export class AiController {
     const userId = req.user.id;
     const res = await this.ai.chat(userId, dto.conversationId, dto.message, dto.teacherId);
     return res;
+  }
+
+  @Post('chat/image')
+  @ApiOperation({
+    summary:
+      'Conversar con el Profesor IA a partir de una imagen ya analizada en tres fases',
+  })
+  @ApiBody({ type: ChatWithImageDto })
+  async chatWithImage(@Req() req: any, @Body() dto: ChatWithImageDto) {
+    return this.ai.chatWithImage(
+      req.user.id,
+      dto.conversationId,
+      dto.message,
+      dto.teacherId,
+      dto,
+    );
   }
 
   @Post('chat/stream')

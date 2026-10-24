@@ -15,6 +15,97 @@ import { GeneratedResourcesService } from './generated-resources/generated-resou
 import { AdaptiveSessionsService } from './adaptive/adaptive-sessions.service';
 import { ResourceGeneratorService } from './adaptive/resource-generator.service';
 import { LearningGoalsService } from './learning-goals/learning-goals.service';
+import {
+  ImageAnalysisResult,
+  ImageAnalysisService,
+} from './image-analysis.service';
+
+/** Máximo de caracteres del material de imagen que se inyecta al profesor. */
+const MAX_IMAGE_MATERIAL_CHARS = 6000;
+/** Máximo de caracteres del resumen de imagen que queda en el historial. */
+const MAX_IMAGE_DIGEST_CHARS = 1800;
+
+function truncateText(text: string, max: number): string {
+  const clean = String(text || '').trim();
+  return clean.length > max ? `${clean.slice(0, max).trim()}…` : clean;
+}
+
+/**
+ * Material completo que recibe el profesor en el turno actual. Incluye la
+ * instrucción pedagógica: usar el análisis para enseñar, no para transcribir.
+ */
+function formatImageMaterial(analysis: ImageAnalysisResult): string {
+  const c = analysis.contenido;
+  const p = analysis.promptInterno;
+  const d = analysis.detalle;
+
+  const lines: string[] = [
+    'El estudiante adjuntó una imagen y el sistema ya la analizó en tres fases.',
+    'Usa este material para ENSEÑAR (explicar, conectar, comprobar comprensión), no para transcribirlo tal cual.',
+    'Si contiene un ejercicio y el estudiante no pidió la solución, guía con preguntas y pistas.',
+    '',
+    `IMAGEN: ${analysis.filename || 'imagen'}`,
+    `Título: ${c.titulo} · Tipo: ${c.tipoContenido} · Tema: ${c.tema} · Nivel: ${c.nivelDificultad}`,
+    '',
+    'CONTENIDO PRINCIPAL (fase 1):',
+    truncateText(c.contenidoPrincipal, 2200),
+  ];
+
+  if (c.textoDetectado) {
+    lines.push('', 'TEXTO DETECTADO:', truncateText(c.textoDetectado, 1400));
+  }
+  if (c.elementosClave.length) {
+    lines.push('', 'ELEMENTOS CLAVE: ' + c.elementosClave.join('; '));
+  }
+  if (p.promptInterno) {
+    lines.push('', 'PROMPT INTERNO (fase 2, guía de análisis):', truncateText(p.promptInterno, 700));
+  }
+  if (p.preguntasGuia.length) {
+    lines.push('', 'PREGUNTAS GUÍA: ' + p.preguntasGuia.join(' | '));
+  }
+
+  lines.push('', 'DETALLE YA ELABORADO (fase 3):');
+  if (d.resumen) lines.push('Resumen: ' + d.resumen);
+  if (d.ideasClave.length) lines.push('Ideas clave: ' + d.ideasClave.join('; '));
+  if (d.conceptos.length) {
+    lines.push(
+      'Conceptos: ' +
+        d.conceptos.map((x) => `${x.termino}: ${x.definicion}`).join(' | '),
+    );
+  }
+  if (d.explicacionPasoAPaso.length) {
+    lines.push('Pasos: ' + d.explicacionPasoAPaso.join(' | '));
+  }
+  if (d.vacios.length) lines.push('Vacíos detectados: ' + d.vacios.join(' | '));
+
+  return truncateText(lines.join('\n'), MAX_IMAGE_MATERIAL_CHARS);
+}
+
+/** Resumen compacto que se guarda en el historial para los turnos siguientes. */
+function formatImageDigest(analysis: ImageAnalysisResult): string {
+  const c = analysis.contenido;
+  const d = analysis.detalle;
+
+  const parts = [
+    `Título: ${c.titulo} | Tema: ${c.tema} | Tipo: ${c.tipoContenido}`,
+    c.contenidoPrincipal
+      ? `Contenido: ${truncateText(c.contenidoPrincipal, 800)}`
+      : '',
+    d.resumen ? `Resumen: ${truncateText(d.resumen, 400)}` : '',
+    d.ideasClave.length ? `Ideas clave: ${d.ideasClave.slice(0, 8).join('; ')}` : '',
+    d.conceptos.length
+      ? `Conceptos: ${d.conceptos
+          .slice(0, 8)
+          .map((x) => `${x.termino}: ${x.definicion}`)
+          .join(' | ')}`
+      : '',
+    d.explicacionPasoAPaso.length
+      ? `Pasos: ${d.explicacionPasoAPaso.slice(0, 8).join(' | ')}`
+      : '',
+  ].filter(Boolean);
+
+  return truncateText(parts.join('\n'), MAX_IMAGE_DIGEST_CHARS);
+}
 
 @Injectable()
 export class AiService {
@@ -37,6 +128,7 @@ export class AiService {
     private readonly adaptiveSessionsService: AdaptiveSessionsService,
     private readonly learningGoalsService: LearningGoalsService,
     private readonly resourceGenerator: ResourceGeneratorService,
+    private readonly imageAnalysis: ImageAnalysisService,
   ) {}
 
   async ensureConversation(userId: number, conversationId?: string) {
@@ -84,6 +176,73 @@ export class AiService {
     return { conversationId: conv._id, reply: response.content };
   }
 
+  /**
+   * Conversa con el Profesor IA usando una imagen ya analizada en tres fases.
+   * La imagen no se reenvía: se guarda un resumen del análisis como adjunto del
+   * mensaje (para los turnos siguientes) y se inyecta el material completo en el
+   * prompt del turno actual.
+   */
+  async chatWithImage(
+    userId: number,
+    conversationId: string | undefined,
+    question: string | undefined,
+    teacherId: string | undefined,
+    raw: {
+      filename?: string;
+      contenido: Record<string, any>;
+      promptInterno: Record<string, any>;
+      detalle: Record<string, any>;
+    },
+  ) {
+    const conv = await this.ensureConversation(userId, conversationId);
+    if (!conv) throw new Error('Failed to create or fetch conversation');
+
+    const analysis: ImageAnalysisResult = {
+      filename: (raw.filename || 'imagen').slice(0, 300),
+      contenido: this.imageAnalysis.normalizeContent(raw.contenido),
+      promptInterno: this.imageAnalysis.normalizeInternalPrompt(raw.promptInterno),
+      detalle: this.imageAnalysis.normalizeDetail(raw.detalle),
+    };
+
+    const userText =
+      (question || '').trim() || 'Explícame esta imagen y ayúdame a entenderla.';
+    const sessionStartedAt = new Date();
+
+    const attachment = {
+      type: 'image-analysis',
+      filename: analysis.filename,
+      titulo: analysis.contenido.titulo,
+      tema: analysis.contenido.tema,
+      digest: formatImageDigest(analysis),
+      createdAt: new Date(),
+    };
+    await this.persistUserMessage(conv._id, userId, userText, [attachment]);
+
+    const prep = await this.prepareInteraction(userId, conv._id, userText, sessionStartedAt);
+    const messagesForModel = await this.buildModelPrompt(
+      userId,
+      prep,
+      userText,
+      formatImageMaterial(analysis),
+    );
+
+    const response = await this.groq.chat(messagesForModel);
+    await this.persistAssistantMessage(conv._id, userId, response.content, response.tokensUsed, response.model);
+    await this.autoGenerateTitle(conv, userText);
+
+    await this.finalizeInteraction(userId, conv._id, userText, prep, sessionStartedAt);
+
+    return {
+      conversationId: conv._id,
+      reply: response.content,
+      imageAnalysis: {
+        titulo: analysis.contenido.titulo,
+        tema: analysis.contenido.tema,
+        resumen: analysis.detalle.resumen,
+      },
+    };
+  }
+
   async streamChat(
     userId: number,
     conversationId: string | undefined,
@@ -120,7 +279,12 @@ export class AiService {
     return { conversationId: conv._id, reply: finalContent };
   }
 
-  private async persistUserMessage(conversationId: any, userId: number, message: string) {
+  private async persistUserMessage(
+    conversationId: any,
+    userId: number,
+    message: string,
+    attachments: any[] = [],
+  ) {
     const userMsg = {
       conversationId,
       userId,
@@ -128,7 +292,7 @@ export class AiService {
       content: message,
       tokensUsed: null,
       model: null,
-      attachments: [],
+      attachments,
       createdAt: new Date(),
     };
 
@@ -162,7 +326,15 @@ export class AiService {
 
     const historyCursor = this.messages.find({ conversationId }).sort({ createdAt: 1 }).limit(50);
     const history = await historyCursor.toArray();
-    const conversationContext = history.map((m) => ({ role: m.role, content: m.content }));
+    const conversationContext = history.map((m) => {
+      const imageDigest = this.imageAttachmentDigest(m);
+      return {
+        role: m.role,
+        content: imageDigest
+          ? `${m.content}\n\n[Imagen adjunta analizada en 3 fases]\n${imageDigest}`
+          : m.content,
+      };
+    });
 
     const memories: any = await this.memoryService.getRelevantMemories(userId, message, 10);
 
@@ -223,7 +395,12 @@ export class AiService {
     };
   }
 
-  private async buildModelPrompt(userId: number, prep: any, message: string) {
+  private async buildModelPrompt(
+    userId: number,
+    prep: any,
+    message: string,
+    attachmentsContext?: string,
+  ) {
     const memForPrompt = (prep.memories || []).map((m: any) => ({
       type: String(m.type || ''),
       key: String(m.key || m.type || ''),
@@ -246,7 +423,18 @@ export class AiService {
       gapsForPrompt,
       prep.currentStudentModel,
       prep.adaptive,
+      attachmentsContext,
     );
+  }
+
+  /** Resumen de las imágenes ya analizadas que viaja en el historial. */
+  private imageAttachmentDigest(message: any): string {
+    if (!Array.isArray(message?.attachments)) return '';
+    return message.attachments
+      .filter((attachment: any) => attachment?.type === 'image-analysis')
+      .map((attachment: any) => String(attachment.digest || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
   }
 
   private async finalizeInteraction(userId: number, conversationId: any, message: string, prep: any, sessionStartedAt: Date) {

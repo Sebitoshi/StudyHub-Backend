@@ -56,6 +56,14 @@ export interface ImagePhaseMeta {
   tokensUsados: number | null;
 }
 
+/** Resultado completo del pipeline de tres fases. */
+export interface ImageAnalysisResult {
+  filename?: string;
+  contenido: ImageContentPhase;
+  promptInterno: InternalPromptPhase;
+  detalle: ImageDetailPhase;
+}
+
 const VISION_SYSTEM_PROMPT = `Eres un extractor visual experto en material académico para StudyHub, una app de estudio para universitarios.
 
 Tu única tarea es leer una imagen (apuntes, pizarra, diapositiva, diagrama, tabla, ejercicio o foto de un libro) y devolver su contenido de la forma más fiel posible.
@@ -337,7 +345,7 @@ export class ImageAnalysisService {
   // sueltos o campos ausentes. La UI siempre recibe la misma forma.
   // ---------------------------------------------------------------------------
 
-  private normalizeContent(raw: any): ImageContentPhase {
+  normalizeContent(raw: any): ImageContentPhase {
     const contenidoPrincipal = this.text(
       this.pick(raw, 'contenidoPrincipal', 'contenido', 'mainContent', 'content', 'description'),
     );
@@ -361,7 +369,7 @@ export class ImageAnalysisService {
     };
   }
 
-  private normalizeInternalPrompt(
+  normalizeInternalPrompt(
     raw: any,
     fallbackEnfoque = '',
   ): InternalPromptPhase {
@@ -382,7 +390,7 @@ export class ImageAnalysisService {
     };
   }
 
-  private normalizeDetail(raw: any): ImageDetailPhase {
+  normalizeDetail(raw: any): ImageDetailPhase {
     return {
       resumen: this.text(this.pick(raw, 'resumen', 'summary')),
       ideasClave: this.list(this.pick(raw, 'ideasClave', 'ideas', 'keyIdeas')),

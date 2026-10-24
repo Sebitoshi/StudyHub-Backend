@@ -21,6 +21,7 @@ export class PromptBuilderService {
     knowledgeGaps?: any,
     studentModel?: any,
     adaptive?: any,
+    attachmentsContext?: string,
   ) {
     const defaultSystem = `Eres Profesor IA: un tutor académico para estudiantes de secundaria y universidad. Sigue estos principios:
 - Enseñar antes que responder: prioriza la explicación y el razonamiento paso a paso cuando sea pertinente.
@@ -163,6 +164,14 @@ export class PromptBuilderService {
     if (knowledgeGaps && knowledgeGaps.length) {
       const gaps = knowledgeGaps.slice(0, 5).map((g) => `${g.topic}`);
       messages.push({ role: 'system', content: `KnowledgeGaps:\n${gaps.join('\n')}` });
+    }
+
+    // Material adjunto (imagen analizada en 3 fases) para el turno actual
+    if (attachmentsContext) {
+      messages.push({
+        role: 'system',
+        content: `AttachedImageAnalysis:\n${attachmentsContext}`,
+      });
     }
 
     // Include recent conversation context (last N messages)
