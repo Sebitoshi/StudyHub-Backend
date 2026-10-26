@@ -51,12 +51,12 @@ export function asBuffer(value: any): Buffer {
     const inner = value.value(true);
     if (Buffer.isBuffer(inner)) return inner;
     if (ArrayBuffer.isView(inner)) {
-      return Buffer.from(inner.buffer, inner.byteOffset, inner.byteLength);
+      return Buffer.from(new Uint8Array(inner.buffer, inner.byteOffset, inner.byteLength));
     }
     return Buffer.from(inner);
   }
   if (ArrayBuffer.isView(value)) {
-    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+    return Buffer.from(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
   }
   if (value?.buffer) return Buffer.from(value.buffer);
   return Buffer.alloc(0);
