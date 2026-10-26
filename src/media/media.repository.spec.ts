@@ -1,4 +1,4 @@
-import { Binary } from 'bson';
+import { Binary } from 'mongodb';
 import { asBuffer } from './media.repository';
 import { detectImageMime } from './image.util';
 

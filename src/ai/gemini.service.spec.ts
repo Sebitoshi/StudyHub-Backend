@@ -4,6 +4,8 @@ const ENV_KEYS = [
   'GEMINI_API_KEY',
   'GEMINI_MODEL',
   'GEMINI_VISION_MODEL',
+  'GEMINI_FALLBACK_MODELS',
+  'GEMINI_VISION_FALLBACK_MODELS',
   'GEMINI_THINKING_LEVEL',
   'GEMINI_THINKING_BUDGET',
   'GEMINI_TIMEOUT_MS',
@@ -48,6 +50,8 @@ describe('GeminiService', () => {
     process.env.GEMINI_API_KEY = 'test-key';
     process.env.GEMINI_MODEL = 'gemini-3.8-flash';
     process.env.GEMINI_VISION_MODEL = 'gemini-3.8-flash';
+    delete process.env.GEMINI_FALLBACK_MODELS;
+    delete process.env.GEMINI_VISION_FALLBACK_MODELS;
     process.env.GEMINI_THINKING_LEVEL = 'low';
     delete process.env.GEMINI_THINKING_BUDGET;
     delete process.env.GEMINI_TIMEOUT_MS;
@@ -132,6 +136,95 @@ describe('GeminiService', () => {
     });
   });
 
+  it('prueba un modelo gratuito de respaldo cuando el principal está saturado', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        fakeResponse(
+          {
+            error: {
+              message:
+                'This model is currently experiencing high demand. Spikes in demand are usually temporary.',
+            },
+          },
+          503,
+        ),
+      )
+      .mockResolvedValueOnce(
+        fakeResponse({
+          candidates: [
+            {
+              content: { parts: [{ text: 'Respuesta del respaldo' }] },
+              finishReason: 'STOP',
+            },
+          ],
+          modelVersion: 'models/gemini-2.5-flash',
+        }),
+      );
+
+    const service = new GeminiService();
+    const result = await service.chat([{ role: 'user', content: 'Hola' }]);
+
+    expect(result.content).toBe('Respuesta del respaldo');
+    expect(result.model).toBe('gemini-2.5-flash');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toContain(
+      '/models/gemini-3.8-flash:generateContent',
+    );
+    expect(fetchMock.mock.calls[1][0]).toContain(
+      '/models/gemini-2.5-flash:generateContent',
+    );
+  });
+
+  it('no cambia de modelo ante un 400 de contenido', async () => {
+    fetchMock.mockResolvedValue(
+      fakeResponse(
+        { error: { message: 'El contenido fue bloqueado por seguridad.' } },
+        400,
+      ),
+    );
+
+    const service = new GeminiService();
+
+    await expect(
+      service.chat([{ role: 'user', content: 'Hola' }]),
+    ).rejects.toThrow('Gemini 400');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('usa el respaldo de visión si el modelo visual principal falla', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        fakeResponse({ error: { message: 'high demand' } }, 503),
+      )
+      .mockResolvedValueOnce(
+        fakeResponse({
+          candidates: [
+            { content: { parts: [{ text: 'Veo la imagen.' }] } },
+          ],
+          modelVersion: 'models/gemini-2.5-flash',
+        }),
+      );
+
+    const service = new GeminiService();
+    const result = await service.chat([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Analiza' },
+          {
+            type: 'image_url',
+            image_url: { url: 'data:image/jpeg;base64,aGVsbG8=' },
+          },
+        ],
+      },
+    ]);
+
+    expect(result.content).toBe('Veo la imagen.');
+    expect(fetchMock.mock.calls[1][0]).toContain(
+      '/models/gemini-2.5-flash:generateContent',
+    );
+  });
+
   it('pide JSON y tolera el bloque de código que devuelve el modelo', async () => {
     fetchMock.mockResolvedValue(
       fakeResponse({
@@ -177,6 +270,33 @@ describe('GeminiService', () => {
 
     expect(result).toEqual({ used: true, model: 'gemini-3.8-flash' });
     expect(chunks.join('')).toBe('Hola mundo');
+  });
+
+  it('reintenta el stream con un modelo de respaldo si no emitió texto', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        fakeResponse({ error: { message: 'high demand' } }, 503),
+      )
+      .mockResolvedValueOnce(
+        sseResponse([
+          'data: {"candidates":[{"content":{"parts":[{"text":"Hola desde 2.5"}]}}]}\n\n',
+        ]),
+      );
+
+    const service = new GeminiService();
+    const chunks: string[] = [];
+    const result = await service.stream(
+      [{ role: 'user', content: 'Saluda' }],
+      (chunk) => {
+        chunks.push(chunk);
+      },
+    );
+
+    expect(result).toEqual({ used: true, model: 'gemini-2.5-flash' });
+    expect(chunks.join('')).toBe('Hola desde 2.5');
+    expect(fetchMock.mock.calls[1][0]).toContain(
+      '/models/gemini-2.5-flash:streamGenerateContent',
+    );
   });
 
   it('no llama a la API si falta la clave', async () => {

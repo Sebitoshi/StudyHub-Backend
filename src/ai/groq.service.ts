@@ -28,10 +28,22 @@ export class GroqService {
   private readonly logger = new Logger(GroqService.name);
   private client: any | null = null;
   private readonly model: string;
+  private readonly fallbackModels: string[];
+  private readonly defaultMaxTokens: number;
 
   constructor() {
     const apiKey = process.env.GROQ_API_KEY;
     this.model = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+    this.fallbackModels = this.parseModelList(
+      process.env.GROQ_FALLBACK_MODELS,
+      'openai/gpt-oss-120b,llama-3.3-70b-versatile,llama-3.1-8b-instant',
+    ).filter((model) => model !== this.model);
+    this.defaultMaxTokens = this.envNumber(
+      'GROQ_CHAT_MAX_TOKENS',
+      900,
+      128,
+      4096,
+    );
 
     if (!apiKey) {
       throw new Error('GROQ_API_KEY is required for GroqService');
@@ -60,33 +72,58 @@ export class GroqService {
       throw new Error('Groq client not initialized');
     }
 
-    const model = options?.model || this.model;
+    const models = this.modelCandidates(options?.model);
+    let lastError: any;
 
-    try {
-      const params: any = {
-        model,
-        messages,
-        ...(options?.json ? { response_format: { type: 'json_object' } } : {}),
-        ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {}),
-        ...(options?.temperature !== undefined ? { temperature: options.temperature } : {}),
-      };
+    for (let i = 0; i < models.length; i++) {
+      const model = models[i];
 
-      const response = await this.client.chat.completions.create(params);
-
-      // Try to extract content from common response shapes
-      const content =
-        response?.choices?.[0]?.message?.content ??
-        response?.choices?.[0]?.text ??
-        response?.output?.[0]?.content ??
-        JSON.stringify(response);
-      const tokensUsed =
-        response?.usage?.total_tokens ?? response?.usage?.totalTokens ?? null;
-
-      return { content, tokensUsed, model };
-    } catch (err) {
-      this.logger.error('Groq API call failed: ' + err);
-      throw err;
+      try {
+        return await this.requestChat(model, messages, options);
+      } catch (err) {
+        lastError = err;
+        if (i < models.length - 1 && this.shouldTryNextModel(err)) {
+          this.logger.warn(
+            `Groq ${model} falló (${this.errorMessage(err)}); probando ${models[i + 1]}.`,
+          );
+          continue;
+        }
+        this.logger.error('Groq API call failed: ' + err);
+        throw err;
+      }
     }
+
+    throw lastError;
+  }
+
+  private async requestChat(
+    model: string,
+    messages: ChatMessage[],
+    options?: ChatOptions,
+  ): Promise<{ content: string; tokensUsed?: number; model?: string }> {
+    const maxTokens = this.maxTokensFor(model, options?.maxTokens);
+    const params: any = {
+      model,
+      messages,
+      ...(options?.json ? { response_format: { type: 'json_object' } } : {}),
+      max_tokens: maxTokens,
+      ...(options?.temperature !== undefined
+        ? { temperature: options.temperature }
+        : {}),
+    };
+
+    const response = await this.client.chat.completions.create(params);
+
+    // Try to extract content from common response shapes
+    const content =
+      response?.choices?.[0]?.message?.content ??
+      response?.choices?.[0]?.text ??
+      response?.output?.[0]?.content ??
+      JSON.stringify(response);
+    const tokensUsed =
+      response?.usage?.total_tokens ?? response?.usage?.totalTokens ?? null;
+
+    return { content, tokensUsed, model };
   }
 
   /**
@@ -205,6 +242,81 @@ export class GroqService {
     }
 
     return 12;
+  }
+
+  /**
+   * Si el caller pide un modelo concreto (p. ej. uno de visión), se respeta y
+   * no se cambia por un modelo de texto. Para el modelo por defecto se prueban
+   * alternativas gratuitas cuando el principal está limitado o retirado.
+   */
+  private modelCandidates(requested?: string): string[] {
+    const clean = requested?.trim();
+    if (clean) return [clean];
+
+    return [this.model, ...this.fallbackModels].filter(
+      (model, index, all) => !!model && all.indexOf(model) === index,
+    );
+  }
+
+  private maxTokensFor(model: string, requested?: number): number {
+    const value = Number(requested);
+    const base =
+      Number.isFinite(value) && value > 0 ? value : this.defaultMaxTokens;
+    // qwen/qwen3.8-27b del tier gratuito tiene un OTPM de 1000. Los modelos
+    // de respaldo aceptan más, pero no necesitamos respuestas gigantes.
+    const cap = /qwen/i.test(model) ? 900 : 2048;
+    return Math.max(128, Math.min(base, cap));
+  }
+
+  private shouldTryNextModel(err: any): boolean {
+    const status = Number(err?.status ?? err?.response?.status ?? 0);
+    if (status === 401 || status === 403) return false;
+
+    const message = this.errorMessage(err);
+    if (
+      status === 400 &&
+      !/model|decommission|not found|not supported|does not exist/i.test(
+        message,
+      )
+    ) {
+      return false;
+    }
+
+    return (
+      status === 404 ||
+      status === 429 ||
+      status === 500 ||
+      status === 502 ||
+      status === 503 ||
+      status === 504 ||
+      /rate_limit|OTPM|TPM|model_not_found|decommission|not found|not supported|does not exist/i.test(
+        message,
+      )
+    );
+  }
+
+  private errorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message.slice(0, 300);
+    return String(error).slice(0, 300);
+  }
+
+  private parseModelList(raw: string | undefined, fallback: string): string[] {
+    const source = raw?.trim() ? raw : fallback;
+    return source
+      .split(',')
+      .map((model) => model.trim())
+      .filter(Boolean);
+  }
+
+  private envNumber(
+    name: string,
+    fallback: number,
+    min: number,
+    max: number,
+  ): number {
+    const value = Number(process.env[name]);
+    if (!Number.isFinite(value) || value <= 0) return fallback;
+    return Math.min(max, Math.max(min, value));
   }
 
   private parseJsonContent(raw: string): any {
@@ -397,6 +509,46 @@ export class GroqService {
   ): Promise<boolean> {
     if (!this.client) throw new Error('Groq client not initialized');
 
+    const models = this.modelCandidates();
+    let lastError: any;
+
+    for (let i = 0; i < models.length; i++) {
+      const model = models[i];
+      let emitted = false;
+
+      try {
+        const used = await this.streamModel(model, messages, async (chunk) => {
+          emitted = true;
+          await onChunk(chunk);
+        });
+        if (used) return true;
+        if (i === models.length - 1) return false;
+      } catch (err) {
+        lastError = err;
+        if (emitted) {
+          this.logger.error('Groq streaming failed: ' + err);
+          return false;
+        }
+        if (i < models.length - 1 && this.shouldTryNextModel(err)) {
+          this.logger.warn(
+            `Groq ${model} falló en stream (${this.errorMessage(err)}); probando ${models[i + 1]}.`,
+          );
+          continue;
+        }
+        this.logger.error('Groq streaming failed: ' + err);
+        return false;
+      }
+    }
+
+    this.logger.error('Groq streaming failed: ' + lastError);
+    return false;
+  }
+
+  private async streamModel(
+    model: string,
+    messages: ChatMessage[],
+    onChunk: (chunk: string) => Promise<void> | void,
+  ): Promise<boolean> {
     // Try common streaming entry points
     const streamFn =
       this.client?.chat?.completions?.stream ??
@@ -404,50 +556,46 @@ export class GroqService {
       null;
     if (!streamFn) return false;
 
-    try {
-      const stream = await streamFn.call(this.client.chat.completions, {
-        model: this.model,
-        messages,
-      });
+    const stream = await streamFn.call(this.client.chat.completions, {
+      model,
+      messages,
+      max_tokens: this.maxTokensFor(model),
+    });
 
-      // If the stream is async iterable, iterate and forward chunks
-      if (stream && typeof stream[Symbol.asyncIterator] === 'function') {
-        for await (const part of stream) {
-          // Try to extract text chunk from common shapes
-          const chunk =
-            part?.delta?.content ??
-            part?.choices?.[0]?.delta?.content ??
-            part?.text ??
-            part?.content ??
-            JSON.stringify(part);
-          if (chunk) await onChunk(chunk);
-        }
-        return true;
+    // If the stream is async iterable, iterate and forward chunks
+    if (stream && typeof stream[Symbol.asyncIterator] === 'function') {
+      for await (const part of stream) {
+        // Try to extract text chunk from common shapes
+        const chunk =
+          part?.delta?.content ??
+          part?.choices?.[0]?.delta?.content ??
+          part?.text ??
+          part?.content ??
+          JSON.stringify(part);
+        if (chunk) await onChunk(chunk);
       }
-
-      // If stream provides an on('data') API
-      if (typeof stream.on === 'function') {
-        stream.on('data', async (part: any) => {
-          const chunk =
-            part?.delta?.content ??
-            part?.choices?.[0]?.delta?.content ??
-            part?.text ??
-            part?.content ??
-            JSON.stringify(part);
-          if (chunk) await onChunk(chunk);
-        });
-        // await finished
-        await new Promise((resolve, reject) => {
-          stream.on('end', resolve);
-          stream.on('error', reject);
-        });
-        return true;
-      }
-
-      return false;
-    } catch (err) {
-      this.logger.error('Groq streaming failed: ' + err);
-      return false;
+      return true;
     }
+
+    // If stream provides an on('data') API
+    if (typeof stream.on === 'function') {
+      stream.on('data', async (part: any) => {
+        const chunk =
+          part?.delta?.content ??
+          part?.choices?.[0]?.delta?.content ??
+          part?.text ??
+          part?.content ??
+          JSON.stringify(part);
+        if (chunk) await onChunk(chunk);
+      });
+      // await finished
+      await new Promise((resolve, reject) => {
+        stream.on('end', resolve);
+        stream.on('error', reject);
+      });
+      return true;
+    }
+
+    return false;
   }
 }

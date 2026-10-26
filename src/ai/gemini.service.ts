@@ -10,6 +10,14 @@ import type { ChatMessage } from './groq.service';
  * imágenes (`image_url` con data URL o URL https) pasan a `inlineData`.
  */
 const DEFAULT_MODEL = 'gemini-3.8-flash';
+/**
+ * Modelos gratuitos de respaldo. Si el modelo principal está saturado (503),
+ * la cuota se agotó (429) o dejó de existir (404), se prueba el siguiente
+ * antes de entregar la petición a Groq.
+ */
+const DEFAULT_FALLBACK_MODELS =
+  'gemini-2.5-flash,gemini-3.5-flash,gemini-flash-lite-latest';
+const DEFAULT_VISION_FALLBACK_MODELS = 'gemini-2.5-flash,gemini-3.5-flash';
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_STREAM_TIMEOUT_MS = 120_000;
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
@@ -66,6 +74,8 @@ export class GeminiService {
   private readonly apiKey: string;
   private readonly model: string;
   private readonly visionModel: string;
+  private readonly fallbackModels: string[];
+  private readonly visionFallbackModels: string[];
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly streamTimeoutMs: number;
@@ -74,6 +84,14 @@ export class GeminiService {
     this.apiKey = (process.env.GEMINI_API_KEY || '').trim();
     this.model = (process.env.GEMINI_MODEL || DEFAULT_MODEL).trim();
     this.visionModel = (process.env.GEMINI_VISION_MODEL || this.model).trim();
+    this.fallbackModels = this.parseModelList(
+      process.env.GEMINI_FALLBACK_MODELS,
+      DEFAULT_FALLBACK_MODELS,
+    );
+    this.visionFallbackModels = this.parseModelList(
+      process.env.GEMINI_VISION_FALLBACK_MODELS,
+      DEFAULT_VISION_FALLBACK_MODELS,
+    );
     this.baseUrl = (
       process.env.GEMINI_API_BASE_URL ||
       'https://generativelanguage.googleapis.com/v1beta'
@@ -94,7 +112,7 @@ export class GeminiService {
 
     if (this.apiKey) {
       this.logger.log(
-        `Gemini configurado como proveedor principal (${this.model})`,
+        `Gemini configurado como proveedor principal (${this.model}; respaldos: ${this.fallbackModels.join(', ') || 'ninguno'})`,
       );
     } else {
       this.logger.warn(
@@ -114,24 +132,46 @@ export class GeminiService {
   ): Promise<GeminiChatResponse> {
     this.assertEnabled();
 
-    const model = this.resolveModel(options?.model, this.hasImages(messages));
-    const payload = await this.buildPayload(messages, options, model);
-    const response = await this.generate(model, payload, this.timeoutMs);
-    const content = this.extractText(response);
+    const models = this.resolveModels(
+      options?.model,
+      this.hasImages(messages),
+    );
+    let lastError: unknown;
 
-    if (!content.trim()) {
-      const reason = response?.candidates?.[0]?.finishReason || 'sin contenido';
-      throw new GeminiRequestError(
-        `Gemini no devolvió texto (${reason}).`,
-        502,
-      );
+    for (let i = 0; i < models.length; i++) {
+      const model = models[i];
+
+      try {
+        const payload = await this.buildPayload(messages, options, model);
+        const response = await this.generate(model, payload, this.timeoutMs);
+        const content = this.extractText(response);
+
+        if (!content.trim()) {
+          const reason =
+            response?.candidates?.[0]?.finishReason || 'sin contenido';
+          throw new GeminiRequestError(
+            `Gemini no devolvió texto (${reason}).`,
+            502,
+          );
+        }
+
+        return {
+          content,
+          tokensUsed: response?.usageMetadata?.totalTokenCount,
+          model: this.responseModel(response, model),
+        };
+      } catch (error) {
+        lastError = error;
+        if (!this.shouldTryNextModel(error) || i === models.length - 1) {
+          throw error;
+        }
+        this.logger.warn(
+          `Gemini ${model} falló (${this.errorMessage(error)}); probando ${models[i + 1]}.`,
+        );
+      }
     }
 
-    return {
-      content,
-      tokensUsed: response?.usageMetadata?.totalTokenCount,
-      model: this.responseModel(response, model),
-    };
+    throw lastError;
   }
 
   async chatJson(
@@ -156,7 +196,40 @@ export class GeminiService {
   ): Promise<{ used: boolean; model?: string }> {
     if (!this.isEnabled()) return { used: false };
 
-    const model = this.resolveModel(undefined, this.hasImages(messages));
+    const models = this.resolveModels(undefined, this.hasImages(messages));
+    let lastError: unknown;
+
+    for (let i = 0; i < models.length; i++) {
+      const model = models[i];
+      let emitted = false;
+
+      try {
+        const result = await this.streamModel(model, messages, async (chunk) => {
+          emitted = true;
+          await onChunk(chunk);
+        });
+        if (result.used) return result;
+        if (i === models.length - 1) return result;
+      } catch (error) {
+        lastError = error;
+        if (emitted) throw error;
+        if (!this.shouldTryNextModel(error) || i === models.length - 1) {
+          throw error;
+        }
+        this.logger.warn(
+          `Gemini ${model} falló en stream (${this.errorMessage(error)}); probando ${models[i + 1]}.`,
+        );
+      }
+    }
+
+    throw lastError;
+  }
+
+  private async streamModel(
+    model: string,
+    messages: ChatMessage[],
+    onChunk: (chunk: string) => Promise<void> | void,
+  ): Promise<{ used: boolean; model?: string }> {
     const payload = await this.buildPayload(messages, undefined, model);
     const url = `${this.baseUrl}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
     const controller = new AbortController();
@@ -511,6 +584,48 @@ export class GeminiService {
     // para Gemini se ignora ese id y se usa el modelo configurado.
     if (/^gemini[-.]/i.test(clean)) return clean;
     return hasImages ? this.visionModel : this.model;
+  }
+
+  /** Modelo principal + respaldos gratuitos, sin repetidos. */
+  private resolveModels(requested?: string, hasImages = false): string[] {
+    const primary = this.resolveModel(requested, hasImages);
+    const fallbacks = hasImages
+      ? this.visionFallbackModels
+      : this.fallbackModels;
+
+    return [primary, ...fallbacks].filter(
+      (model, index, all) => !!model && all.indexOf(model) === index,
+    );
+  }
+
+  private parseModelList(raw: string | undefined, fallback: string): string[] {
+    const source = raw?.trim() ? raw : fallback;
+    return source
+      .split(',')
+      .map((model) => model.trim().replace(/^models\//, ''))
+      .filter(Boolean);
+  }
+
+  /**
+   * Solo se prueba otro modelo cuando el fallo es del proveedor o del modelo
+   * (saturación, cuota, modelo retirado, red o respuesta vacía). Un 400 por
+   * contenido o un 401/403 por clave no mejoran cambiando de modelo.
+   */
+  private shouldTryNextModel(error: unknown): boolean {
+    if (error instanceof GeminiRequestError) {
+      const status = Number(error.status) || 0;
+      if (status === 400 || status === 401 || status === 403 || status === 413) {
+        return false;
+      }
+      return true;
+    }
+
+    return true;
+  }
+
+  private errorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message.slice(0, 300);
+    return String(error).slice(0, 300);
   }
 
   private hasImages(messages: ChatMessage[]): boolean {
