@@ -1498,9 +1498,31 @@ DATABASE_URL=postgresql://user:password@localhost:5432/studyhub
 MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net
 MONGODB_DB=StudyHub
 JWT_SECRET=your-secret
+
+# IA principal (Gemini) y respaldo automático (Groq)
+GEMINI_API_KEY=your-gemini-key
+GEMINI_MODEL=gemini-3.8-flash
 GROQ_API_KEY=your-groq-key
 GROQ_MODEL=openai/gpt-oss-120b
 ```
+
+### Proveedor de IA
+
+Todas las funciones de IA (Profesor IA, apuntes, flashcards, simulacros, roadmaps,
+CV y análisis de imágenes) pasan por `AiProviderService`:
+
+1. Intenta **Gemini** con el contexto completo (system prompt, historial, memorias,
+   materias, tareas, apuntes e imágenes).
+2. Si Gemini no está configurado, falla o tarda demasiado, usa **Groq** con el mismo
+   prompt. El modelo realmente usado se guarda en el historial de la conversación.
+3. Tras un fallo de Gemini se evita reintentarlo durante `AI_FALLBACK_COOLDOWN_MS`
+   (30 s por defecto) para no sumar latencia a cada petición.
+
+Variables opcionales: `GEMINI_VISION_MODEL` (por defecto el mismo modelo),
+`GEMINI_THINKING_LEVEL` (`low`, `medium` o `high`; `low` por defecto),
+`GEMINI_TIMEOUT_MS` (30000), `GEMINI_STREAM_TIMEOUT_MS` (120000) y
+`AI_FALLBACK_COOLDOWN_MS` (30000). Con modelos 2.5 se puede fijar
+`GEMINI_THINKING_BUDGET`; `0` desactiva el razonamiento interno.
 
 ## Ejecución
 

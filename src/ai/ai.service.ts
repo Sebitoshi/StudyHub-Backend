@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Collection, ObjectId } from 'mongodb';
 import { CONVERSATIONS_COLLECTION, MESSAGES_COLLECTION } from './mongo.provider';
-import { GroqService } from './groq.service';
+import { AiProviderService } from './ai-provider.service';
 import { PromptBuilderService } from './context/prompt-builder.service';
 import { AcademicContextService } from './context/academic-context.service';
 import { TeacherProfileService } from './teacher-profiles/teacher-profile.service';
@@ -189,7 +189,7 @@ export class AiService {
   constructor(
     @Inject(CONVERSATIONS_COLLECTION) private conversations: Collection,
     @Inject(MESSAGES_COLLECTION) private messages: Collection,
-    private readonly groq: GroqService,
+    private readonly ai: AiProviderService,
     private readonly promptBuilder: PromptBuilderService,
     private readonly memoryService: MemoryService,
     private readonly academicService: AcademicContextService,
@@ -242,7 +242,7 @@ export class AiService {
     const prep = await this.prepareInteraction(userId, conv._id, message, sessionStartedAt);
     const messagesForModel = await this.buildModelPrompt(userId, prep, message);
 
-    const response = await this.groq.chat(messagesForModel);
+    const response = await this.ai.chat(messagesForModel);
     await this.persistAssistantMessage(conv._id, userId, response.content, response.tokensUsed, response.model);
     await this.autoGenerateTitle(conv, message);
 
@@ -363,18 +363,22 @@ export class AiService {
     const messagesForModel = await this.buildModelPrompt(userId, prep, message);
 
     let finalContent = '';
-    const usedStream = await this.groq.stream(messagesForModel, async (chunk: string) => {
+    let usedModel: string | null = null;
+    const streamed = await this.ai.stream(messagesForModel, async (chunk: string) => {
       finalContent += chunk;
       await onChunk(chunk);
     });
 
-    if (!usedStream) {
-      const response = await this.groq.chat(messagesForModel);
+    if (!streamed.used) {
+      const response = await this.ai.chat(messagesForModel);
       finalContent = response.content;
+      usedModel = response.model || null;
       await onChunk(finalContent);
+    } else {
+      usedModel = streamed.model || null;
     }
 
-    await this.persistAssistantMessage(conv._id, userId, finalContent, null, process.env.GROQ_MODEL || null);
+    await this.persistAssistantMessage(conv._id, userId, finalContent, null, usedModel);
     await this.autoGenerateTitle(conv, message);
 
     await this.finalizeInteraction(userId, conv._id, message, prep, sessionStartedAt);
@@ -396,7 +400,7 @@ export class AiService {
     const options = { maxTokens: 900 };
 
     try {
-      return await this.groq.chat(messages, { ...options, model: preferredModel });
+      return await this.ai.chat(messages, { ...options, model: preferredModel });
     } catch (err: any) {
       const status = err?.status ?? err?.response?.status;
       const message = String(err?.message || '');
@@ -413,7 +417,7 @@ export class AiService {
       );
       // La ventana de OTPM se reinicia en ~12 s según las cabeceras de Groq.
       if (rateLimited) await new Promise((resolve) => setTimeout(resolve, 13000));
-      return this.groq.chat(messages, { ...options, model: fallbackModel });
+      return this.ai.chat(messages, { ...options, model: fallbackModel });
     }
   }
 
@@ -697,7 +701,7 @@ export class AiService {
           { role: 'system', content: 'You are a concise title generator.' },
           { role: 'user', content: `Generate a short, descriptive title (3-6 words) for this conversation: "${message}"` },
         ];
-        const titleResp = await this.groq.chat(titlePrompt);
+        const titleResp = await this.ai.chat(titlePrompt);
         const title = (titleResp?.content || '').trim().slice(0, 120);
         if (title) {
           await this.conversations.updateOne({ _id: conv._id }, { $set: { title, updatedAt: new Date() } });
@@ -855,7 +859,7 @@ REGLAS ESTRICTAS:
 Usa Markdown: negritas (**texto**), tablas |col1|col2|, y LaTeX ($fórmula$) para matemáticas.
 Responde SOLO con el texto de la explicación, sin JSON.`;
 
-    const { content } = await this.groq.chat([{ role: 'user', content: prompt }]);
+    const { content } = await this.ai.chat([{ role: 'user', content: prompt }]);
     return { explanation: content };
   }
 }

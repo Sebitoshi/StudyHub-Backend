@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { GroqService } from '../ai/groq.service';
+import { AiProviderService } from '../ai/ai-provider.service';
 import { LearningGoalsService } from '../ai/learning-goals/learning-goals.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RiskEngineService } from './risk-engine.service';
@@ -17,7 +17,7 @@ export class AcademicRiskService {
     private recommendations: RiskRecommendationService,
     private learningGoals: LearningGoalsService,
     private notifications: NotificationsService,
-    private groq: GroqService,
+    private ai: AiProviderService,
   ) {}
 
   async recalculate(userId: number) {
@@ -89,7 +89,7 @@ export class AcademicRiskService {
     reasonsText: string,
   ): Promise<string> {
     try {
-      const response = await this.groq.chat([
+      const response = await this.ai.chat([
         {
           role: 'user',
           content: `Genera un plan de estudio urgente de 7 días para un estudiante con riesgo académico alto. Motivos: ${reasonsText}.
@@ -107,7 +107,7 @@ export class AcademicRiskService {
     reasonsText: string,
   ): Promise<string> {
     try {
-      const response = await this.groq.chat([
+      const response = await this.ai.chat([
         {
           role: 'user',
           content: `Genera 3 consejos de preparación para exámenes para un estudiante con: ${reasonsText}.

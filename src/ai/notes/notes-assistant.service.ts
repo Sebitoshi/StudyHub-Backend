@@ -5,7 +5,7 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { GroqService } from '../groq.service';
+import { AiProviderService } from '../ai-provider.service';
 import type { NoteAssistantAction } from '../../subjects/dto/note-assistant.dto';
 
 /** Entrada ya validada por el controlador (incluye el nombre de la materia). */
@@ -61,7 +61,7 @@ Reglas de salida:
 export class NotesAssistantService {
   private readonly logger = new Logger(NotesAssistantService.name);
 
-  constructor(private readonly groq: GroqService) {}
+  constructor(private readonly ai: AiProviderService) {}
 
   async suggest(input: NoteAssistantInput): Promise<NoteAssistantResult> {
     const title = (input.title || '').trim().slice(0, MAX_TITLE_CHARS);
@@ -96,7 +96,7 @@ export class NotesAssistantService {
     );
 
     try {
-      const response = await this.groq.chat(messages, { maxTokens });
+      const response = await this.ai.chat(messages, { maxTokens });
       const proposal = this.sanitize(response.content);
       if (!proposal) {
         throw new HttpException(

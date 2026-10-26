@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { GroqService } from '../ai/groq.service';
+import { AiProviderService } from '../ai/ai-provider.service';
 import { LearningGoalsService } from '../ai/learning-goals/learning-goals.service';
 import { GenerateRoadmapDto } from './dto/generate-roadmap.dto';
 import { RoadmapTemplate } from '@prisma/client';
@@ -17,7 +17,7 @@ export class RoadmapsService {
 
   constructor(
     private prisma: PrismaService,
-    private groq: GroqService,
+    private ai: AiProviderService,
     private learningGoalsService: LearningGoalsService,
     @Inject('MONGO_CLIENT') private mongoClient: any,
   ) {}
@@ -61,7 +61,7 @@ export class RoadmapsService {
     // Generar con IA
     let roadmapData: any;
     try {
-      const { data } = await this.groq.chatJson([
+      const { data } = await this.ai.chatJson([
         { role: 'user', content: this.buildTopicPrompt(topic, goal) },
       ]);
       roadmapData = data;
@@ -287,7 +287,7 @@ Asegúrate de cubrir de forma estructurada y progresiva las habilidades necesari
     let roadmapData;
     try {
       // chatJson aplica JSON mode, max_tokens amplio, reparación de JSON truncado y reintentos
-      const { data } = await this.groq.chatJson([
+      const { data } = await this.ai.chatJson([
         { role: 'user', content: prompt },
       ]);
       roadmapData = data;

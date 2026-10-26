@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { GroqService } from '../ai/groq.service';
+import { AiProviderService } from '../ai/ai-provider.service';
 import { extractPdfText } from '../common/pdf-runtime';
 
 @Injectable()
@@ -14,7 +14,7 @@ export class ResumeAnalyzerService {
 
   constructor(
     private prisma: PrismaService,
-    private groq: GroqService,
+    private ai: AiProviderService,
   ) {}
 
   async analyzeFile(userId: number, file: Express.Multer.File) {
@@ -169,7 +169,7 @@ ${text}
 
     let analysisData: any;
     try {
-      const groqResponse = await this.groq.chat([
+      const groqResponse = await this.ai.chat([
         { role: 'user', content: prompt },
       ]);
       const cleaned = groqResponse.content

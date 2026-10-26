@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 import { GroqService } from './groq.service';
+import { GeminiService } from './gemini.service';
+import { AiProviderService } from './ai-provider.service';
 import { MongoModule } from './mongo.module';
 import { AcademicContextService } from './context/academic-context.service';
 import { PromptBuilderService } from './context/prompt-builder.service';
@@ -49,6 +51,8 @@ import { PrismaModule } from '../prisma/prisma.module';
   providers: [
     AiService,
     GroqService,
+    GeminiService,
+    AiProviderService,
     AcademicContextService,
     PromptBuilderService,
     JobMatchingService,
@@ -79,6 +83,8 @@ import { PrismaModule } from '../prisma/prisma.module';
   ],
   exports: [
     AiService,
+    AiProviderService,
+    GeminiService,
     GroqService,
     JobMatchingService,
     LearningGoalsService,

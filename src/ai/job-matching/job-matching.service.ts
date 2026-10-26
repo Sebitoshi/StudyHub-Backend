@@ -1,13 +1,13 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { GroqService } from '../groq.service';
+import { AiProviderService } from '../ai-provider.service';
 import { MongoClient } from 'mongodb';
 
 @Injectable()
 export class JobMatchingService {
   constructor(
     private prisma: PrismaService,
-    private groq: GroqService,
+    private ai: AiProviderService,
     @Inject('MONGO_CLIENT') private mongoClient: MongoClient,
   ) {}
 
@@ -139,7 +139,7 @@ Genera un JSON EXACTO con las siguientes claves (no uses markdown):
   "hiringProbability": numero de 0 a 100 evaluando probabilidad realista
 }`;
 
-      const groqResponse = await this.groq.chat([{ role: 'user', content: prompt }]);
+      const groqResponse = await this.ai.chat([{ role: 'user', content: prompt }]);
       const cleanedJsonStr = groqResponse.content.replace(/```json/g, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleanedJsonStr);
       

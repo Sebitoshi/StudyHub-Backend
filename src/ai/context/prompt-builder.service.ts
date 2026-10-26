@@ -9,7 +9,7 @@ export class PromptBuilderService {
 
   /**
    * Build final prompt messages for the model.
-   * Returns an array of `{role, content}` objects to feed to GroqService.
+   * Returns an array of `{role, content}` objects to feed to AiProviderService.
    */
   async buildPrompt(
     userId: number,

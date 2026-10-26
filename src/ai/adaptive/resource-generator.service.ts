@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GeneratedResourcesService, SIMULACRO_TRIGGER } from '../generated-resources/generated-resources.service';
-import { GroqService } from '../groq.service';
+import { AiProviderService } from '../ai-provider.service';
 
 type ResourceType = 'SUMMARY' | 'FLASHCARDS' | 'QUIZ' | 'STUDY_PLAN' | 'EXAM_SIMULATION';
 
@@ -24,7 +24,7 @@ export class ResourceGeneratorService {
 
   constructor(
     private readonly generated: GeneratedResourcesService,
-    private readonly groq: GroqService,
+    private readonly ai: AiProviderService,
   ) {}
 
   /**
@@ -140,7 +140,7 @@ export class ResourceGeneratorService {
 
   private async generateAllResourcesBatch(ctx: ResourceGenerationContext, difficulty: string) {
     const contextBlock = this.buildContextBlock(ctx, difficulty);
-    const { data } = await this.groq.chatJson([
+    const { data } = await this.ai.chatJson([
       {
         role: 'system',
         content: `Eres un diseñador instruccional universitario. Genera recursos académicos personalizados en español.
@@ -234,7 +234,7 @@ ${this.batchJsonSchema()}`,
     const contextBlock = this.buildQuizContextBlock(topic, subject, difficulty, gaps, options.recentUserMessages || []);
     const materialBlock = this.buildMaterialBlock(options.material);
 
-    const { data } = await this.groq.chatJson([
+    const { data } = await this.ai.chatJson([
       {
         role: 'system',
         content: `Eres un profesor universitario que diseña quizzes de práctica en español.
@@ -309,7 +309,7 @@ ${this.quizJsonSchema()}`,
     const contextBlock = this.buildQuizContextBlock(topic, subject, difficulty, gaps, options.recentUserMessages || []);
     const materialBlock = this.buildMaterialBlock(options.material);
 
-    const { data } = await this.groq.chatJson([
+    const { data } = await this.ai.chatJson([
       {
         role: 'system',
         content: `Eres un profesor universitario que diseña flashcards de repaso en español.
@@ -419,7 +419,7 @@ ${this.flashcardsJsonSchema()}`,
     const contextBlock = this.buildContextBlock(ctx, difficulty);
     const spec = this.resourceSpec(type, ctx, difficulty);
 
-    const { data } = await this.groq.chatJson([
+    const { data } = await this.ai.chatJson([
       {
         role: 'system',
         content: `Eres un diseñador instruccional universitario. Genera recursos académicos personalizados en español.

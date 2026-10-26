@@ -5,7 +5,8 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { ChatMessage, GroqService } from './groq.service';
+import { ChatMessage } from './groq.service';
+import { AiProviderService } from './ai-provider.service';
 
 /**
  * Modelo multimodal de Groq (visión + JSON mode). Se puede cambiar sin tocar el
@@ -171,7 +172,7 @@ const DETAIL_MAX_JSON_SHAPE = `{
 export class ImageAnalysisService {
   private readonly logger = new Logger(ImageAnalysisService.name);
 
-  constructor(private readonly groq: GroqService) {}
+  constructor(private readonly ai: AiProviderService) {}
 
   private get visionModel(): string {
     return process.env.GROQ_VISION_MODEL || DEFAULT_VISION_MODEL;
@@ -366,7 +367,7 @@ export class ImageAnalysisService {
     options: { model?: string; maxTokens: number; temperature: number },
   ): Promise<{ data: any; tokensUsed?: number; model?: string }> {
     try {
-      return await this.groq.chatJson(messages, options);
+      return await this.ai.chatJson(messages, options);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Fase ${phase} del análisis de imagen falló: ${message}`);
