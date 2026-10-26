@@ -43,11 +43,20 @@ export interface StoredImage {
 }
 
 /** El driver devuelve BSON Binary; lo normalizamos siempre a Buffer. */
-function asBuffer(value: any): Buffer {
+export function asBuffer(value: any): Buffer {
   if (Buffer.isBuffer(value)) return value;
   if (value && typeof value.value === 'function') {
-    const inner = value.value();
-    return Buffer.isBuffer(inner) ? inner : Buffer.from(inner);
+    // `value(true)` devuelve los bytes crudos. Sin `true` devuelve un string
+    // ISO-8859-1 que `Buffer.from` reinterpreta como UTF-8 y corrompe la imagen.
+    const inner = value.value(true);
+    if (Buffer.isBuffer(inner)) return inner;
+    if (ArrayBuffer.isView(inner)) {
+      return Buffer.from(inner.buffer, inner.byteOffset, inner.byteLength);
+    }
+    return Buffer.from(inner);
+  }
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
   }
   if (value?.buffer) return Buffer.from(value.buffer);
   return Buffer.alloc(0);
