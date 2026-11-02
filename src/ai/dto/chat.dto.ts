@@ -21,9 +21,9 @@ export class ChatDto {
 
   @ApiPropertyOptional({
     description:
-      'Profundidad del contexto: low (solo chat), medium (progreso), max (apuntes del profesor) o maxpro (apuntes de todas las materias).',
+      'Profundidad del contexto: auto (detecta el profesor y la materia), low (solo chat), medium (progreso), max (apuntes del profesor) o maxpro (apuntes de todas las materias).',
     enum: CHAT_DEPTH_VALUES,
-    default: 'medium',
+    default: 'auto',
   })
   @IsOptional()
   @IsIn(CHAT_DEPTH_VALUES)

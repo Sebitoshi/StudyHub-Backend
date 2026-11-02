@@ -72,9 +72,9 @@ export class ChatWithImageDto {
 
   @ApiPropertyOptional({
     description:
-      'Profundidad del contexto del chat: low, medium, max o maxpro.',
+      'Profundidad del contexto del chat: auto, low, medium, max o maxpro.',
     enum: CHAT_DEPTH_VALUES,
-    default: 'medium',
+    default: 'auto',
   })
   @IsOptional()
   @IsIn(CHAT_DEPTH_VALUES)
