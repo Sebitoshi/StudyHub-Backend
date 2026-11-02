@@ -9,7 +9,7 @@ import { GamificationService } from '../gamification/gamification.service';
 describe('AuthService', () => {
   let service: AuthService;
   let prisma: {
-    user: { findUnique: jest.Mock };
+    user: { findUnique: jest.Mock; findFirst: jest.Mock };
     userSession: {
       findFirst: jest.Mock;
       create: jest.Mock;
@@ -26,13 +26,14 @@ describe('AuthService', () => {
     nombre: 'Ana',
     apellido: 'Pérez',
     foto: null,
+    googleId: 'google-123',
     isActive: true,
     isBanned: false,
   };
 
   beforeEach(async () => {
     prisma = {
-      user: { findUnique: jest.fn() },
+      user: { findUnique: jest.fn(), findFirst: jest.fn() },
       userSession: {
         findFirst: jest.fn(),
         create: jest.fn().mockResolvedValue({ id: 1 }),
@@ -67,6 +68,29 @@ describe('AuthService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('issueTokens (vía login con Google)', () => {
+    it('crea una sesión y devuelve access + refresh token', async () => {
+      prisma.user.findFirst.mockResolvedValue(user);
+
+      const result = await service.validateGoogleUser({
+        email: user.email,
+        nombre: user.nombre,
+        apellido: user.apellido,
+        googleId: 'google-123',
+      });
+
+      expect(result.access_token).toBe('access-token');
+      expect(result.refresh_token).toHaveLength(96);
+      expect(prisma.userSession.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: user.id,
+          // Se guarda el hash, no el token en claro.
+          refreshToken: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
+      });
+    });
   });
 
   describe('refresh', () => {
