@@ -231,7 +231,7 @@ ${this.batchJsonSchema()}`,
     const trigger = isSimulacro ? SIMULACRO_TRIGGER : 'QUIZ_TAB';
     const count = Math.min(15, Math.max(3, options.count || (isSimulacro ? 10 : 8)));
 
-    const contextBlock = this.buildQuizContextBlock(topic, subject, difficulty, gaps, options.recentUserMessages || []);
+    const contextBlock = this.buildQuizContextBlock(topic, subject, difficulty, gaps, options.recentUserMessages || [], !isSimulacro);
     const materialBlock = this.buildMaterialBlock(options.material);
 
     const { data } = await this.ai.chatJson([
@@ -254,7 +254,7 @@ REGLAS OBLIGATORIAS DE NOTACIÓN MATEMÁTICA:
 
 TAREA: Genera ${isSimulacro ? 'un SIMULACRO de examen cronometrado' : 'un quiz de práctica'} de ${count} preguntas de opción múltiple sobre "${topic}" en ${subject}.
 Dificultad: ${difficulty}.
-Prioriza las brechas de conocimiento del estudiante.
+${isSimulacro ? '' : 'Prioriza las brechas de conocimiento del estudiante.'}
 Varía tipos de pregunta: conceptual, aplicación, procedimiento y detección de errores.${isSimulacro ? '\nEsto es un examen cronometrado: ordena las preguntas de menor a mayor dificultad, no incluyas pistas ni la respuesta dentro del enunciado y evita repetir la misma idea dos veces.' : ''}
 Cada pregunta debe tener exactamente 4 opciones, la respuesta correcta con el texto EXACTO de una de las opciones, y una explicación breve.
 IMPORTANTE: La respuesta correcta NO siempre debe ser la primera opción (A). Distribuye las respuestas correctas entre las posiciones A, B, C y D de forma variada para que el estudiante deba leer todas las opciones.
@@ -647,18 +647,28 @@ Prioriza gaps y debilidades del estudiante.`;
     return 'conceptos fundamentales';
   }
 
-  private buildQuizContextBlock(topic: string, subject: string, difficulty: string, gaps: any[], recentMessages: string[]) {
-    const gapLines = (gaps || []).slice(0, 6).map((g) => `- ${g.topic} (${g.subject || 'general'}, confianza: ${g.confidence ?? '?'}, estado: ${g.status || '?'})`);
-    const recentLines = (recentMessages || []).slice(-6).map((m) => `- ${String(m || '').slice(0, 140)}`);
-    return [
+  private buildQuizContextBlock(
+    topic: string,
+    subject: string,
+    difficulty: string,
+    gaps: any[],
+    recentMessages: string[],
+    includeContext = true,
+  ) {
+    const lines = [
       `TEMA: ${topic}`,
       `MATERIA: ${subject}`,
       `DIFICULTAD: ${difficulty}`,
-      `BRECHAS DE CONOCIMIENTO DETECTADAS:`,
-      gapLines.length ? gapLines.join('\n') : '- ninguna',
-      `MENSAJES RECIENTES DEL ESTUDIANTE (contexto de lo que ha estudiado):`,
-      recentLines.length ? recentLines.join('\n') : '- ninguno',
-    ].join('\n');
+    ];
+    if (includeContext) {
+      const gapLines = (gaps || []).slice(0, 6).map((g) => `- ${g.topic} (${g.subject || 'general'}, confianza: ${g.confidence ?? '?'}, estado: ${g.status || '?'})`);
+      const recentLines = (recentMessages || []).slice(-6).map((m) => `- ${String(m || '').slice(0, 140)}`);
+      lines.push(`BRECHAS DE CONOCIMIENTO DETECTADAS:`);
+      lines.push(gapLines.length ? gapLines.join('\n') : '- ninguna');
+      lines.push(`MENSAJES RECIENTES DEL ESTUDIANTE (contexto de lo que ha estudiado):`);
+      lines.push(recentLines.length ? recentLines.join('\n') : '- ninguno');
+    }
+    return lines.join('\n');
   }
 
   /**

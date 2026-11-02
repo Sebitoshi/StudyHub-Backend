@@ -847,19 +847,29 @@ export class AiService {
    * temas recientes que el estudiante ha estado conversando con la IA.
    */
   async generateQuiz(userId: number, dto: { topic?: string; difficulty?: string; count?: number; origin?: string; material?: string }) {
-    const [gaps, recentMessages] = await Promise.all([
-      this.knowledgeGapsService.getTopGaps(userId, 10).catch(() => []),
-      this.messages.find({ userId, role: 'user' }).sort({ createdAt: -1 }).limit(15).toArray().catch(() => []),
-    ]);
-    const recentTexts = (recentMessages || []).map((m) => m.content || '').filter(Boolean).reverse();
+    const isSimulacro = String(dto.origin || '').toUpperCase() === 'SIMULACRO';
+
+    // En un simulacro no interesan las brechas ni los mensajes recientes: el
+    // examen se genera a partir del tema/materia/dificultad (y del material).
+    let gaps: any[] = [];
+    let recentTexts: string[] = [];
+    if (!isSimulacro) {
+      const [gapData, recentData] = await Promise.all([
+        this.knowledgeGapsService.getTopGaps(userId, 10).catch(() => []),
+        this.messages.find({ userId, role: 'user' }).sort({ createdAt: -1 }).limit(15).toArray().catch(() => []),
+      ]);
+      gaps = gapData || [];
+      recentTexts = (recentData || []).map((m) => m.content || '').filter(Boolean).reverse();
+    }
+
     return this.resourceGenerator.generateQuizForUser(userId, null, {
       topic: dto.topic,
       difficulty: dto.difficulty,
       count: dto.count,
       origin: dto.origin,
       material: dto.material,
-      knowledgeGaps: gaps || [],
-      recentUserMessages: recentTexts,
+      knowledgeGaps: isSimulacro ? [] : gaps,
+      recentUserMessages: isSimulacro ? [] : recentTexts,
     });
   }
 
