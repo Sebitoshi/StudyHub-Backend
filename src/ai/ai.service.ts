@@ -578,11 +578,6 @@ export class AiService {
 
     let generatedResourceIds: string[] = [];
     let learningGoals: any[] = [];
-    try {
-      learningGoals = await this.learningGoalsService.listGoals(userId);
-    } catch (err) {
-      this.logger.warn('Learning goals retrieval failed: ' + err);
-    }
 
     if (adaptive?.triggers?.length) {
       // Solo se generan recursos cuando el estudiante los pide explícitamente
@@ -594,6 +589,12 @@ export class AiService {
       );
 
       if (explicitRequest) {
+        try {
+          learningGoals = await this.learningGoalsService.listGoals(userId);
+        } catch (err) {
+          this.logger.warn('Learning goals retrieval failed: ' + err);
+        }
+
         try {
           const generated = await this.adaptiveLearningService.generateAutomaticResources(
             userId,
