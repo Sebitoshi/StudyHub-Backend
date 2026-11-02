@@ -363,6 +363,20 @@ Redirige a: `${FRONTEND_URL}/auth/callback?token=...&user=...`
 | GET | `/ai/knowledge-gaps/:subject` | Gaps por materia |
 | PATCH | `/ai/knowledge-gaps/:id` | Actualizar gap |
 
+> Los modos `max`/`maxpro` y el análisis de imágenes/documentos requieren plan Premium; el chat gratis tiene créditos diarios. Si se agotan, la API responde `402` con `code: AI_DAILY_LIMIT_REACHED` o `PREMIUM_REQUIRED`.
+
+---
+
+## Billing — `/billing`
+
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/billing/plans` | público | Planes gratis y premium |
+| GET | `/billing/me` | JWT | Plan, suscripción y créditos del día |
+| POST | `/billing/subscribe` | JWT | Crear suscripción y devolver `initPoint` de Mercado Pago |
+| POST | `/billing/cancel` | JWT | Cancelar renovación (acceso hasta el fin del periodo) |
+| POST | `/billing/webhook` | firma MP | Notificaciones de suscripción y cobros |
+
 ```json
 // POST /ai/chat — Request
 { "conversationId": "abc123", "message": "Explícame las integrales por partes" }

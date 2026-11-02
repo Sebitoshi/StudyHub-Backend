@@ -1130,6 +1130,52 @@ Actualizar estado de un knowledge gap.
 
 ---
 
+### Billing (`/billing`)
+
+Pasarela: **Mercado Pago** (suscripciones con `preapproval`, moneda COP). Stripe
+no permite cuentas de Colombia ni de Chile, por eso no se usa.
+
+| Plan | Precio | Créditos de chat IA por día | Incluye |
+|------|--------|------------------------------|---------|
+| `FREE` | $0 | 25 (configurable) | Chat y contexto académico |
+| `PREMIUM` | $29.900 COP/mes (configurable) | Ilimitados | Sin límite diario, `max`/`maxpro`, imágenes y documentos |
+
+Los créditos se cuentan por día calendario en `America/Bogota` y se guardan en
+`ai_daily_usage`. El chat descuenta el crédito **después** de responder: si el
+modelo falla, el estudiante no pierde el cupo.
+
+##### `GET /billing/plans`
+Listar planes (público).
+
+##### `GET /billing/me`
+Estado de la suscripción, plan actual y créditos restantes del día.
+
+##### `POST /billing/subscribe`
+Iniciar el checkout de la suscripción mensual.
+
+**Request Body:**
+| Campo | Tipo | Requerido | Ejemplo |
+|-------|------|-----------|---------|
+| planCode | string | no | PREMIUM |
+
+**Response `201`:** `{ planCode, subscriptionId, initPoint, status, amountCop }`.
+El frontend debe redirigir a `initPoint`; al autorizar, Mercado Pago vuelve a
+`BILLING_BACK_URL`.
+
+##### `POST /billing/cancel`
+Cancelar la renovación. El acceso Premium se mantiene hasta `currentPeriodEnd`.
+
+##### `POST /billing/webhook`
+Webhook de Mercado Pago (sin JWT). Valida `x-signature`, deduplica por `eventId`,
+consulta el estado real en la API y nunca confía en el cuerpo del evento.
+
+**Errores del chat (`402 Payment Required`):**
+- `PREMIUM_REQUIRED`: el modo `max`/`maxpro` o el análisis de imagen/documento
+  requiere Premium.
+- `AI_DAILY_LIMIT_REACHED`: se agotaron los créditos diarios (incluye `resetAt`).
+
+---
+
 ### Roadmaps (`/roadmaps`)
 
 Todas requieren `Bearer JWT`.
@@ -1504,7 +1550,32 @@ GEMINI_API_KEY=your-gemini-key
 GEMINI_MODEL=gemini-3.8-flash
 GROQ_API_KEY=your-groq-key
 GROQ_MODEL=openai/gpt-oss-120b
+
+# Billing (Mercado Pago, Colombia)
+MERCADOPAGO_ACCESS_TOKEN=your-access-token
+MERCADOPAGO_WEBHOOK_SECRET=your-webhook-secret
+APP_PUBLIC_URL=https://api.tudominio.com
+BILLING_BACK_URL=https://app.tudominio.com/premium/gracias
+# Opcionales
+BILLING_WEBHOOK_URL=https://api.tudominio.com/billing/webhook
+AI_PREMIUM_PRICE_COP=29900
+AI_FREE_DAILY_CREDITS=25
+AI_PREMIUM_DAILY_CREDITS=-1
+BILLING_TIMEZONE=America/Bogota
 ```
+
+### Billing
+
+Después de configurar las variables, aplica la migración de planes y suscripciones:
+
+```bash
+pnpm prisma migrate deploy
+```
+
+Configura el webhook en Mercado Pago apuntando a `POST /billing/webhook` y usa la
+misma clave secreta en `MERCADOPAGO_WEBHOOK_SECRET`. En Suscripciones la URL debe
+ir declarada al crear el `preapproval`: el backend la toma de `BILLING_WEBHOOK_URL`
+o de `APP_PUBLIC_URL + /billing/webhook`.
 
 ### Proveedor de IA
 

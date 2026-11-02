@@ -103,7 +103,14 @@ export class BillingService {
       payerEmail: user.email,
       amountCop: plan.priceCop,
       backUrl: this.mercadoPago.backUrl(),
+      notificationUrl: this.mercadoPago.webhookUrl(),
     });
+
+    if (!this.mercadoPago.webhookUrl()) {
+      this.logger.warn(
+        'Sin BILLING_WEBHOOK_URL ni APP_PUBLIC_URL: Mercado Pago no podrá notificar los pagos de la suscripción.',
+      );
+    }
 
     if (!created.id) {
       throw new ServiceUnavailableException('Mercado Pago no devolvió la suscripción creada.');

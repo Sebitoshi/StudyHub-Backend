@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Subscription } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeChatDepth } from '../ai/context/chat-depth';
@@ -59,6 +59,8 @@ export function usageDayKey(now: Date = new Date()): Date {
 
 @Injectable()
 export class EntitlementsService {
+  private readonly logger = new Logger(EntitlementsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /** Suscripción vigente: autorizada (o cancelada) mientras dure el periodo pagado. */
@@ -78,12 +80,24 @@ export class EntitlementsService {
 
   async getAccount(userId: number): Promise<AccountSnapshot> {
     const day = usageDayKey();
-    const [subscription, usage] = await Promise.all([
-      this.prisma.subscription.findUnique({ where: { userId } }),
-      this.prisma.aiDailyUsage.findUnique({
-        where: { userId_day: { userId, day } },
-      }),
-    ]);
+    let subscription: Subscription | null = null;
+    let usage: { messages: number; premiumUses: number } | null = null;
+
+    try {
+      [subscription, usage] = await Promise.all([
+        this.prisma.subscription.findUnique({ where: { userId } }),
+        this.prisma.aiDailyUsage.findUnique({
+          where: { userId_day: { userId, day } },
+        }),
+      ]);
+    } catch (err: any) {
+      // Despliegue sin la migración aplicada: las tablas no existen todavía.
+      // El chat debe seguir funcionando con el plan gratis en lugar de fallar.
+      this.logger.warn(
+        `No se pudo leer el estado de facturación (${err?.code || err?.message}); se usa el plan gratis.`,
+      );
+      return this.freeAccountSnapshot();
+    }
 
     const plan = this.resolvePlan(subscription);
     const used = usage?.messages ?? 0;
@@ -106,6 +120,20 @@ export class EntitlementsService {
             initPoint: subscription.initPoint,
           }
         : null,
+    };
+  }
+
+  private freeAccountSnapshot(): AccountSnapshot {
+    const plan = getFreePlan();
+    return {
+      planCode: plan.code,
+      planName: plan.name,
+      premium: false,
+      dailyCredits: plan.dailyCredits,
+      used: 0,
+      remaining: plan.dailyCredits,
+      premiumUsed: 0,
+      subscription: null,
     };
   }
 
@@ -168,18 +196,25 @@ export class EntitlementsService {
     const premiumUse =
       Boolean(options.premiumOnly) || PREMIUM_DEPTHS.has(normalizeChatDepth(options.depth));
 
-    await this.prisma.aiDailyUsage.upsert({
-      where: { userId_day: { userId, day } },
-      create: {
-        userId,
-        day,
-        messages: 1,
-        premiumUses: premiumUse ? 1 : 0,
-      },
-      update: {
-        messages: { increment: 1 },
-        ...(premiumUse ? { premiumUses: { increment: 1 } } : {}),
-      },
-    });
+    try {
+      await this.prisma.aiDailyUsage.upsert({
+        where: { userId_day: { userId, day } },
+        create: {
+          userId,
+          day,
+          messages: 1,
+          premiumUses: premiumUse ? 1 : 0,
+        },
+        update: {
+          messages: { increment: 1 },
+          ...(premiumUse ? { premiumUses: { increment: 1 } } : {}),
+        },
+      });
+    } catch (err: any) {
+      // El consumo jamás debe romper una respuesta que el modelo ya generó.
+      this.logger.warn(
+        `No se pudo registrar el consumo diario (${err?.code || err?.message}).`,
+      );
+    }
   }
 }

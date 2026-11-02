@@ -50,6 +50,17 @@ export class MercadoPagoService {
     );
   }
 
+  /**
+   * URL pública del webhook. En Suscripciones Mercado Pago no usa la URL del
+   * panel de la aplicación: hay que declararla en cada preapproval.
+   */
+  webhookUrl(): string | null {
+    const explicit = (process.env.BILLING_WEBHOOK_URL || '').trim();
+    if (explicit) return explicit;
+    const base = (process.env.APP_PUBLIC_URL || '').trim().replace(/\/+$/, '');
+    return base ? `${base}/billing/webhook` : null;
+  }
+
   /** URL de retorno tras autorizar o rechazar el checkout. */
   backUrl(): string {
     const base = (process.env.BILLING_BACK_URL || process.env.APP_PUBLIC_URL || '').trim();
@@ -90,23 +101,26 @@ export class MercadoPagoService {
     payerEmail: string;
     amountCop: number;
     backUrl: string;
+    notificationUrl?: string | null;
   }): Promise<ProviderSubscription> {
     try {
-      const response = await this.client().create({
-        body: {
-          reason: input.reason,
-          external_reference: `user:${input.userId}`,
-          payer_email: input.payerEmail,
-          back_url: input.backUrl,
-          status: 'pending',
-          auto_recurring: {
-            frequency: 1,
-            frequency_type: 'months',
-            transaction_amount: input.amountCop,
-            currency_id: 'COP',
-          },
+      const body: Record<string, unknown> = {
+        reason: input.reason,
+        external_reference: `user:${input.userId}`,
+        payer_email: input.payerEmail,
+        back_url: input.backUrl,
+        status: 'pending',
+        auto_recurring: {
+          frequency: 1,
+          frequency_type: 'months',
+          transaction_amount: input.amountCop,
+          currency_id: 'COP',
         },
-      });
+      };
+      // El SDK aún no tipa `notification_url`, pero la API de Suscripciones lo acepta.
+      if (input.notificationUrl) body.notification_url = input.notificationUrl;
+
+      const response = await this.client().create({ body: body as any });
       return this.toProviderSubscription(response);
     } catch (err) {
       this.logger.error(
