@@ -19,6 +19,7 @@ import { GenerateFlashcardsDto } from './dto/generate-flashcards.dto';
 import { ExplainAnswerDto } from './dto/explain-answer.dto';
 import { ImageDetailDto, InternalPromptDto } from './dto/image-analysis.dto';
 import { ChatWithImageDto } from './dto/chat-with-image.dto';
+import { ChatWithDocumentDto } from './dto/chat-with-document.dto';
 import { ImageAnalysisService } from './image-analysis.service';
 import { ObjectId } from 'mongodb';
 import type { Response } from 'express';
@@ -73,6 +74,31 @@ export class AiController {
       dto.teacherId,
       dto,
     );
+  }
+
+  @Post('chat/document')
+  @ApiOperation({
+    summary:
+      'Conversar con el Profesor IA a partir de un documento subido (PDF/DOCX/TXT): extrae el texto y lo usa como material para analizar y enseñar.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: ChatWithDocumentDto })
+  @UseInterceptors(FileInterceptor('file'))
+  async chatWithDocument(
+    @Req() req: any,
+    @UploadedFile() file?: Express.Multer.File,
+    @Query('uploadId') uploadId?: string,
+    @Body() body?: ChatWithDocumentDto,
+  ) {
+    const userId = req.user.id;
+    const source = await this.resolveMaterial(userId, uploadId || body?.uploadId, file, body?.topic);
+    const res = await this.ai.chatWithDocument(userId, body?.conversationId, body?.question, body?.teacherId, {
+      filename: source.filename,
+      material: source.material,
+      topic: source.topic,
+      depth: body?.depth,
+    });
+    return res;
   }
 
   @Post('chat/stream')

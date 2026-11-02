@@ -27,6 +27,9 @@ const MAX_IMAGE_MATERIAL_CHARS = 6000;
 /** Máximo de caracteres del resumen de imagen que queda en el historial. */
 const MAX_IMAGE_DIGEST_CHARS = 1800;
 
+/** Tipos de adjunto que viajan en el historial: análisis de imagen o de documento. */
+const ATTACHMENT_TYPES = new Set(['image-analysis', 'document-analysis']);
+
 function truncateText(text: string, max: number): string {
   const clean = String(text || '').trim();
   return clean.length > max ? `${clean.slice(0, max).trim()}…` : clean;
@@ -291,6 +294,8 @@ export class AiService {
       detalle?: Record<string, any>;
       nivel?: string;
       depth?: string;
+      /** Tipo de adjunto persistido (image-analysis | document-analysis). */
+      attachmentType?: string;
     },
   ) {
     const chatDepth = normalizeChatDepth(raw.depth);
@@ -323,7 +328,7 @@ export class AiService {
     const sessionStartedAt = new Date();
 
     const attachment = {
-      type: 'image-analysis',
+      type: raw.attachmentType || 'image-analysis',
       filename: analysis.filename,
       titulo: analysis.contenido.titulo,
       tema: analysis.contenido.tema,
@@ -374,6 +379,63 @@ export class AiService {
         resumen: analysis.detalle?.resumen || analysis.contenido.contenidoPrincipal,
         fases: depth.fases,
         nivel: depth.nivel,
+      },
+    };
+  }
+
+  /**
+   * Conversa con el Profesor IA a partir de un documento subido (PDF/DOCX/TXT).
+   *
+   * El backend ya extrajo el texto del documento (directamente o desde una subida
+   * por partes) y se arma el mismo "análisis" que el flujo de imágenes a partir de
+   * ese material para alimentar al profesor en el turno actual. Así el Profesor IA
+   * puede analizar PDFs y responder con base en su contenido.
+   */
+  async chatWithDocument(
+    userId: number,
+    conversationId: string | undefined,
+    question: string | undefined,
+    teacherId: string | undefined,
+    raw: { filename?: string; material: string; topic?: string; depth?: string },
+  ) {
+    const chatDepth = normalizeChatDepth(raw.depth);
+    const material = truncateText(raw.material || '', MAX_IMAGE_MATERIAL_CHARS);
+    const analysis: ImageAnalysisResult = {
+      filename: (raw.filename || 'documento').slice(0, 300),
+      contenido: {
+        titulo: (raw.topic || raw.filename || 'Documento').slice(0, 120),
+        tipoContenido: 'documento',
+        tema: (raw.topic || '').slice(0, 120),
+        nivelDificultad: 'intermedio',
+        contenidoPrincipal: material || 'Sin contenido legible en el documento.',
+        textoDetectado: material || 'Sin contenido legible en el documento.',
+        elementosClave: [],
+        advertencias: [],
+      },
+      nivel: 'default',
+    };
+
+    const userText =
+      (question || '').trim() || 'Explícame este documento y ayúdame a entenderlo.';
+
+    const result = await this.chatWithImage(userId, conversationId, userText, teacherId, {
+      filename: analysis.filename,
+      contenido: analysis.contenido,
+      nivel: analysis.nivel,
+      depth: chatDepth,
+      attachmentType: 'document-analysis',
+    });
+
+    return {
+      conversationId: result.conversationId,
+      reply: result.reply,
+      depth: result.depth,
+      documentAnalysis: {
+        titulo: analysis.contenido.titulo,
+        tema: analysis.contenido.tema,
+        resumen: analysis.contenido.contenidoPrincipal,
+        fases: result.imageAnalysis?.fases ?? 1,
+        nivel: result.imageAnalysis?.nivel,
       },
     };
   }
@@ -514,14 +576,19 @@ export class AiService {
     const historyCursor = this.messages.find({ conversationId }).sort({ createdAt: 1 }).limit(50);
     const history = await historyCursor.toArray();
     const conversationContext = history.map((m) => {
-      const imageDigest = this.imageAttachmentDigest(m);
-      const imageFases = this.imageAttachmentPhases(m);
+      const attachmentDigestValue = this.attachmentDigest(m);
+      const attachmentFases = this.attachmentPhases(m);
+      const kind = this.attachmentType(m);
+      const kindLabel =
+        kind === 'document-analysis'
+          ? 'Documento adjunto analizado'
+          : 'Imagen adjunta analizada';
       return {
         role: m.role,
-        content: imageDigest
-          ? `${m.content}\n\n[Imagen adjunta analizada en ${imageFases} ${
-              imageFases === 1 ? 'fase' : 'fases'
-            }]\n${imageDigest}`
+        content: attachmentDigestValue
+          ? `${m.content}\n\n[${kindLabel} en ${attachmentFases} ${
+              attachmentFases === 1 ? 'fase' : 'fases'
+            }]\n${attachmentDigestValue}`
           : m.content,
       };
     });
@@ -701,21 +768,36 @@ export class AiService {
     });
   }
 
-  /** Resumen de las imágenes ya analizadas que viaja en el historial. */
-  private imageAttachmentDigest(message: any): string {
+  /** Tipo del último adjunto analizado (image-analysis | document-analysis). */
+  private attachmentType(message: any): string {
+    if (!Array.isArray(message?.attachments)) return 'image-analysis';
+    const attachment = message.attachments.find(
+      (item: any) =>
+        typeof item?.type === 'string' && ATTACHMENT_TYPES.has(item.type),
+    );
+    return attachment?.type || 'image-analysis';
+  }
+
+  /** Resumen de los adjuntos ya analizados (imagen o documento) que viaja en el historial. */
+  private attachmentDigest(message: any): string {
     if (!Array.isArray(message?.attachments)) return '';
     return message.attachments
-      .filter((attachment: any) => attachment?.type === 'image-analysis')
+      .filter(
+        (attachment: any) =>
+          typeof attachment?.type === 'string' &&
+          ATTACHMENT_TYPES.has(attachment.type),
+      )
       .map((attachment: any) => String(attachment.digest || '').trim())
       .filter(Boolean)
       .join('\n\n');
   }
 
-  /** Fases con las que se analizó la imagen adjunta (3 si es historial antiguo). */
-  private imageAttachmentPhases(message: any): number {
+  /** Fases con las que se analizó el adjunto (3 si es historial antiguo). */
+  private attachmentPhases(message: any): number {
     if (!Array.isArray(message?.attachments)) return 3;
     const attachment = message.attachments.find(
-      (item: any) => item?.type === 'image-analysis',
+      (item: any) =>
+        typeof item?.type === 'string' && ATTACHMENT_TYPES.has(item.type),
     );
     const fases = Number(attachment?.fases);
     return Number.isFinite(fases) && fases >= 1 && fases <= 4 ? fases : 3;
