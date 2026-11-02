@@ -12,8 +12,9 @@ export class ChatDto {
   conversationId?: string;
 
   @ApiPropertyOptional({
-    description: 'ID del perfil de profesor IA que responderá el mensaje',
+    description: 'Ignorado: el chat ya no envía perfiles de profesor IA al modelo.',
     example: 'default-teacher',
+    deprecated: true,
   })
   @IsOptional()
   @IsString()
@@ -21,7 +22,7 @@ export class ChatDto {
 
   @ApiPropertyOptional({
     description:
-      'Profundidad del contexto: auto (detecta el profesor y la materia), low (solo chat), medium (progreso), max (apuntes del profesor) o maxpro (apuntes de todas las materias).',
+      'Profundidad del contexto: auto (detecta la materia), low (solo chat), medium (progreso), max (apuntes de la materia) o maxpro (apuntes de todas las materias).',
     enum: CHAT_DEPTH_VALUES,
     default: 'auto',
   })

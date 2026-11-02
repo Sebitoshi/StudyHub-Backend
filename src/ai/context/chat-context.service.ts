@@ -221,7 +221,7 @@ export class ChatContextService {
       },
     });
 
-    return this.formatNotes(notes, teacher?.name || 'el profesor elegido');
+    return this.formatNotes(notes, 'materias relacionadas con la pregunta');
   }
 
   /**

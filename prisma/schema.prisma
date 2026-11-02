@@ -156,6 +156,8 @@ model User {
   studyTimerSessions   StudyTimerSession[]
   calendarEvents       CalendarEvent[]
   googleCalendarToken  GoogleCalendarToken?
+  subscription         Subscription?
+  aiUsage              AiDailyUsage[]
 
   @@map("users")
 }
@@ -918,4 +920,62 @@ model SandboxAttempt {
   @@index([userId])
   @@index([exerciseId])
   @@map("sandbox_attempts")
+}
+
+enum SubscriptionStatus {
+  PENDING
+  AUTHORIZED
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+model Subscription {
+  id                     Int                @id @default(autoincrement())
+  userId                 Int                @unique
+  planCode               String             @default("PREMIUM")
+  provider               String             @default("mercadopago")
+  providerSubscriptionId String?            @unique
+  status                 SubscriptionStatus @default(PENDING)
+  payerEmail             String?
+  initPoint              String?
+  amountCop              Int?
+  currentPeriodEnd       DateTime?
+  authorizedAt           DateTime?
+  cancelledAt            DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model AiDailyUsage {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  day         DateTime @db.Date
+  messages    Int      @default(0)
+  premiumUses Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@map("ai_daily_usage")
+}
+
+model BillingEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String    @unique
+  type        String?
+  payload     Json
+  processedAt DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  @@map("billing_events")
 }

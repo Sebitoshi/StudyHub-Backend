@@ -15,7 +15,7 @@ export class ChatWithImageDto {
   @IsString()
   conversationId?: string;
 
-  @ApiPropertyOptional({ description: 'ID del perfil de profesor IA.' })
+  @ApiPropertyOptional({ description: 'Ignorado: el chat ya no envía perfiles de profesor IA al modelo.', deprecated: true })
   @IsOptional()
   @IsString()
   teacherId?: string;

@@ -21,6 +21,7 @@ import { ImageDetailDto, InternalPromptDto } from './dto/image-analysis.dto';
 import { ChatWithImageDto } from './dto/chat-with-image.dto';
 import { ChatWithDocumentDto } from './dto/chat-with-document.dto';
 import { ImageAnalysisService } from './image-analysis.service';
+import { EntitlementsService } from '../billing/entitlements.service';
 import { ObjectId } from 'mongodb';
 import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
@@ -42,7 +43,23 @@ export class AiController {
     private readonly learningGoals: LearningGoalsService,
     private readonly teacherProfiles: TeacherProfileService,
     private readonly imageAnalysis: ImageAnalysisService,
+    private readonly entitlements: EntitlementsService,
   ) {}
+
+  /**
+   * Los créditos se descuentan cuando la respuesta ya se generó: un fallo del
+   * modelo no debe consumir el cupo diario del estudiante.
+   */
+  private async trackUsage(
+    userId: number,
+    options: { depth?: string; premiumOnly?: false | 'image' | 'document' | 'depth' },
+  ) {
+    try {
+      await this.entitlements.recordChatUsage(userId, options);
+    } catch (err) {
+      this.logger.warn(`No se pudo registrar el consumo de IA del usuario ${userId}: ${err}`);
+    }
+  }
 
   @Post('chat')
   @ApiOperation({ summary: 'Enviar mensaje al asistente IA' })
@@ -50,6 +67,7 @@ export class AiController {
   @ApiResponse({ status: 201, description: 'Respuesta generada por el asistente IA' })
   async chat(@Req() req: any, @Body() dto: ChatDto) {
     const userId = req.user.id;
+    await this.entitlements.assertChatAccess(userId, { depth: dto.depth });
     const res = await this.ai.chat(
       userId,
       dto.conversationId,
@@ -57,6 +75,7 @@ export class AiController {
       dto.teacherId,
       dto.depth,
     );
+    await this.trackUsage(userId, { depth: dto.depth });
     return res;
   }
 
@@ -67,13 +86,20 @@ export class AiController {
   })
   @ApiBody({ type: ChatWithImageDto })
   async chatWithImage(@Req() req: any, @Body() dto: ChatWithImageDto) {
-    return this.ai.chatWithImage(
-      req.user.id,
+    const userId = req.user.id;
+    await this.entitlements.assertChatAccess(userId, {
+      premiumOnly: 'image',
+      depth: dto.depth,
+    });
+    const res = await this.ai.chatWithImage(
+      userId,
       dto.conversationId,
       dto.message,
       dto.teacherId,
       dto,
     );
+    await this.trackUsage(userId, { premiumOnly: 'image', depth: dto.depth });
+    return res;
   }
 
   @Post('chat/document')
@@ -91,6 +117,10 @@ export class AiController {
     @Body() body?: ChatWithDocumentDto,
   ) {
     const userId = req.user.id;
+    await this.entitlements.assertChatAccess(userId, {
+      premiumOnly: 'document',
+      depth: body?.depth,
+    });
     const source = await this.resolveMaterial(userId, uploadId || body?.uploadId, file, body?.topic);
     const res = await this.ai.chatWithDocument(userId, body?.conversationId, body?.question, body?.teacherId, {
       filename: source.filename,
@@ -98,6 +128,7 @@ export class AiController {
       topic: source.topic,
       depth: body?.depth,
     });
+    await this.trackUsage(userId, { premiumOnly: 'document', depth: body?.depth });
     return res;
   }
 
@@ -107,6 +138,8 @@ export class AiController {
   @ApiResponse({ status: 201, description: 'Stream SSE iniciado correctamente' })
   async streamChat(@Req() req: any, @Res() res: Response, @Body() dto: ChatDto) {
     const userId = req.user.id;
+    // Antes de abrir el stream: así el 402 llega como JSON y no como SSE.
+    await this.entitlements.assertChatAccess(userId, { depth: dto.depth });
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -130,6 +163,7 @@ export class AiController {
       if (!closed) {
         res.write(`event: done\ndata: ${JSON.stringify({ conversationId: String(result?.conversationId || '') })}\n\n`);
         res.end();
+        await this.trackUsage(userId, { depth: dto.depth });
       }
     } catch (err) {
       if (!closed) {

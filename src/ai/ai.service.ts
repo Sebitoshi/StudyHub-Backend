@@ -709,9 +709,9 @@ export class AiService {
   }
 
   /**
-   * Usa el profesor que el estudiante eligió en la interfaz. Si el modo es
-   * `auto`, en cambio, detecta automáticamente el profesor/materia que necesita
-   * el estudiante a partir del mensaje y de sus materias.
+   * Resuelve el perfil del profesor solo para uso interno (selección de apuntes
+   * y registro de la sesión adaptativa). El perfil nunca se envía al modelo:
+   * el chat responde como tutor general, sin persona de profesor.
    */
   private async resolveTeacherProfile(
     userId: number,
@@ -761,7 +761,6 @@ export class AiService {
       userMessage: message,
       depth: prep.depth,
       contextText: prep.contextText,
-      teacherProfile: prep.teacherProfile,
       promptTemplate: prep.promptTemplate,
       teachingMode: prep.teachingMode,
       attachmentsContext,

@@ -8,12 +8,6 @@ export interface PromptBuildOptions {
   depth: ChatDepth;
   /** Bloque compacto construido por ChatContextService (vacío en modo low). */
   contextText?: string;
-  teacherProfile?: {
-    code?: string;
-    name?: string;
-    systemPrompt?: string;
-    teachingStyle?: string;
-  };
   promptTemplate?: { code?: string; name?: string; prompt?: string };
   /** Estrategia pedagógica resumida en una línea (opcional). */
   teachingMode?: string | null;
@@ -41,7 +35,6 @@ export class PromptBuilderService {
       userMessage,
       depth,
       contextText,
-      teacherProfile,
       promptTemplate,
       teachingMode,
       attachmentsContext,
@@ -60,13 +53,6 @@ Principios:
     const messages: Array<{ role: string; content: string }> = [
       { role: 'system', content: systemPrompt },
     ];
-
-    if (teacherProfile?.systemPrompt) {
-      messages.push({
-        role: 'system',
-        content: `TeacherProfile (${teacherProfile.name || teacherProfile.code || 'profesor'}):\n${teacherProfile.systemPrompt}`,
-      });
-    }
 
     if (promptTemplate?.prompt) {
       messages.push({ role: 'system', content: `InstructionTemplate:\n${promptTemplate.prompt}` });

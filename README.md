@@ -944,7 +944,7 @@ Enviar mensaje al asistente IA.
 | Campo | Tipo | Requerido | Descripción | Ejemplo |
 |-------|------|-----------|-------------|---------|
 | conversationId | number | no | ID de conversación existente | 1 |
-| teacherId | string | no | ID del perfil de profesor IA | default-teacher |
+| teacherId | string | no | Ignorado: el chat ya no envía perfiles de profesor IA al modelo | default-teacher |
 | message | string | sí | Mensaje del usuario | Explícame la regla de la cadena con un ejemplo corto. |
 
 **Responses:** `201` Respuesta generada por el asistente IA

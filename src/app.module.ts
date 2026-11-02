@@ -19,6 +19,7 @@ import { StudyTimerModule } from './study-timer/study-timer.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { SandboxModule } from './sandbox/sandbox.module';
 import { MediaModule } from './media/media.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { MediaModule } from './media/media.module';
     CalendarModule,
     SandboxModule,
     MediaModule,
+    BillingModule,
   ],
 })
 export class AppModule {}

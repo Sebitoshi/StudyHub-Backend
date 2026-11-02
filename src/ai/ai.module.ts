@@ -38,6 +38,7 @@ import { JobMatchingService } from './job-matching/job-matching.service';
 import { NotesAssistantService } from './notes/notes-assistant.service';
 import { ImageAnalysisService } from './image-analysis.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     TeacherProfileModule,
     PromptTemplateModule,
     KnowledgeGapsModule,
+    BillingModule,
   ],
   controllers: [AiController],
   providers: [
