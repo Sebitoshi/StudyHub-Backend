@@ -7,6 +7,7 @@ import { AiProviderService } from './ai-provider.service';
 import { MongoModule } from './mongo.module';
 import { AcademicContextService } from './context/academic-context.service';
 import { PromptBuilderService } from './context/prompt-builder.service';
+import { ChatContextService } from './context/chat-context.service';
 import { AdaptiveLearningService } from './adaptive/adaptive-learning.service';
 import { SocraticService } from './adaptive/socratic.service';
 import { ResourceGeneratorService } from './adaptive/resource-generator.service';
@@ -55,6 +56,7 @@ import { PrismaModule } from '../prisma/prisma.module';
     AiProviderService,
     AcademicContextService,
     PromptBuilderService,
+    ChatContextService,
     JobMatchingService,
     LearningAnalyticsService,
     LearningAnalyticsRepository,

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
+import { CHAT_DEPTH_VALUES } from '../context/chat-depth';
 
 export class ChatDto {
   @ApiPropertyOptional({
@@ -17,6 +18,16 @@ export class ChatDto {
   @IsOptional()
   @IsString()
   teacherId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Profundidad del contexto: low (solo chat), medium (progreso), max (apuntes del profesor) o maxpro (apuntes de todas las materias).',
+    enum: CHAT_DEPTH_VALUES,
+    default: 'medium',
+  })
+  @IsOptional()
+  @IsIn(CHAT_DEPTH_VALUES)
+  depth?: string;
 
   @ApiProperty({
     description: 'Mensaje del usuario para el asistente IA',

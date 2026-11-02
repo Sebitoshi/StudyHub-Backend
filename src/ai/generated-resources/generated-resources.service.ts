@@ -32,6 +32,11 @@ export class GeneratedResourcesService {
     return this.repo.findByUser(userId);
   }
 
+  /** Resumen ligero de quizzes/simulacros completados para el contexto del chat. */
+  async listCompletedAssessments(userId: number, limit = 8) {
+    return this.repo.findCompletedAssessments(userId, limit);
+  }
+
   async listResourcesForUser(userId: number, type?: string, scope?: string) {
     const rows = await this.repo.findByUser(userId);
     const filteredByType = type

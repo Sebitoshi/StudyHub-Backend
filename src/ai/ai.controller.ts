@@ -49,7 +49,13 @@ export class AiController {
   @ApiResponse({ status: 201, description: 'Respuesta generada por el asistente IA' })
   async chat(@Req() req: any, @Body() dto: ChatDto) {
     const userId = req.user.id;
-    const res = await this.ai.chat(userId, dto.conversationId, dto.message, dto.teacherId);
+    const res = await this.ai.chat(
+      userId,
+      dto.conversationId,
+      dto.message,
+      dto.teacherId,
+      dto.depth,
+    );
     return res;
   }
 
@@ -93,7 +99,7 @@ export class AiController {
         // (un \n\n dentro de data: se interpretaría como separador de eventos).
         res.write(`event: message\ndata: ${JSON.stringify(chunk)}\n\n`);
         if (typeof (res as any).flush === 'function') (res as any).flush();
-      });
+      }, dto.depth);
 
       if (!closed) {
         res.write(`event: done\ndata: ${JSON.stringify({ conversationId: String(result?.conversationId || '') })}\n\n`);

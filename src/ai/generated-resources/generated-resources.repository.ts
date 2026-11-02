@@ -21,6 +21,41 @@ export class GeneratedResourcesRepository {
     return this.col.findOne({ _id: new ObjectId(id) });
   }
 
+  /**
+   * Solo el resumen de quizzes y simulacros ya completados. Se proyectan los
+   * campos que necesita el contexto del chat, no las preguntas completas.
+   */
+  async findCompletedAssessments(userId: number, limit = 8) {
+    return this.col
+      .find(
+        {
+          userId,
+          completed: true,
+          $or: [
+            { type: 'QUIZ' },
+            { type: 'SIMULACRO' },
+            { trigger: 'SIMULACRO_TAB' },
+          ],
+        },
+        {
+          projection: {
+            title: 1,
+            subject: 1,
+            trigger: 1,
+            type: 1,
+            completedAt: 1,
+            createdAt: 1,
+            resultScore: 1,
+            resultCorrect: 1,
+            resultTotal: 1,
+          },
+        },
+      )
+      .sort({ completedAt: -1 })
+      .limit(limit)
+      .toArray();
+  }
+
   async deleteById(id: string) {
     return this.col.deleteOne({ _id: new ObjectId(id) });
   }

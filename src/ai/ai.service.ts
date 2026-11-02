@@ -4,6 +4,8 @@ import { CONVERSATIONS_COLLECTION, MESSAGES_COLLECTION } from './mongo.provider'
 import { AiProviderService } from './ai-provider.service';
 import { PromptBuilderService } from './context/prompt-builder.service';
 import { AcademicContextService } from './context/academic-context.service';
+import { ChatContextService } from './context/chat-context.service';
+import { ChatDepth, normalizeChatDepth } from './context/chat-depth';
 import { TeacherProfileService } from './teacher-profiles/teacher-profile.service';
 import { MemoryService } from './memory/memory.service';
 import { PromptTemplateService } from './prompt-templates/prompt-template.service';
@@ -193,6 +195,7 @@ export class AiService {
     private readonly promptBuilder: PromptBuilderService,
     private readonly memoryService: MemoryService,
     private readonly academicService: AcademicContextService,
+    private readonly chatContext: ChatContextService,
     private readonly teacherProfileService: TeacherProfileService,
     private readonly promptTemplateService: PromptTemplateService,
     private readonly learningAnalyticsService: LearningAnalyticsService,
@@ -232,23 +235,41 @@ export class AiService {
     return await this.conversations.findOne({ _id: res.insertedId });
   }
 
-  async chat(userId: number, conversationId: string | undefined, message: string, teacherId?: string) {
+  async chat(
+    userId: number,
+    conversationId: string | undefined,
+    message: string,
+    teacherId?: string,
+    depth?: string,
+  ) {
+    const chatDepth = normalizeChatDepth(depth);
     const conv = await this.ensureConversation(userId, conversationId);
     if (!conv) throw new Error('Failed to create or fetch conversation');
 
     const sessionStartedAt = new Date();
     await this.persistUserMessage(conv._id, userId, message);
 
-    const prep = await this.prepareInteraction(userId, conv._id, message, sessionStartedAt);
-    const messagesForModel = await this.buildModelPrompt(userId, prep, message);
+    const prep = await this.prepareInteraction(
+      userId,
+      conv._id,
+      message,
+      sessionStartedAt,
+      chatDepth,
+      teacherId,
+    );
+    const messagesForModel = await this.buildModelPrompt(prep, message);
 
     const response = await this.ai.chat(messagesForModel);
     await this.persistAssistantMessage(conv._id, userId, response.content, response.tokensUsed, response.model);
-    await this.autoGenerateTitle(conv, message);
+    void this.autoGenerateTitle(conv, message);
 
-    await this.finalizeInteraction(userId, conv._id, message, prep, sessionStartedAt);
+    // En modo Low Flash la respuesta es solo conversación: no se actualizan
+    // memorias, modelo del estudiante ni sesiones adaptativas.
+    if (chatDepth !== 'low') {
+      await this.finalizeInteraction(userId, conv._id, message, prep, sessionStartedAt);
+    }
 
-    return { conversationId: conv._id, reply: response.content };
+    return { conversationId: conv._id, reply: response.content, depth: chatDepth };
   }
 
   /**
@@ -269,8 +290,10 @@ export class AiService {
       promptInterno?: Record<string, any>;
       detalle?: Record<string, any>;
       nivel?: string;
+      depth?: string;
     },
   ) {
+    const chatDepth = normalizeChatDepth(raw.depth);
     const conv = await this.ensureConversation(userId, conversationId);
     if (!conv) throw new Error('Failed to create or fetch conversation');
 
@@ -311,9 +334,15 @@ export class AiService {
     };
     await this.persistUserMessage(conv._id, userId, userText, [attachment]);
 
-    const prep = await this.prepareInteraction(userId, conv._id, userText, sessionStartedAt);
-    const messagesForModel = await this.buildModelPrompt(
+    const prep = await this.prepareInteraction(
       userId,
+      conv._id,
+      userText,
+      sessionStartedAt,
+      chatDepth,
+      teacherId,
+    );
+    const messagesForModel = await this.buildModelPrompt(
       prep,
       userText,
       formatImageMaterial(analysis),
@@ -329,13 +358,16 @@ export class AiService {
       );
     }
     await this.persistAssistantMessage(conv._id, userId, response.content, response.tokensUsed, response.model);
-    await this.autoGenerateTitle(conv, userText);
+    void this.autoGenerateTitle(conv, userText);
 
-    await this.finalizeInteraction(userId, conv._id, userText, prep, sessionStartedAt);
+    if (chatDepth !== 'low') {
+      await this.finalizeInteraction(userId, conv._id, userText, prep, sessionStartedAt);
+    }
 
     return {
       conversationId: conv._id,
       reply: response.content,
+      depth: chatDepth,
       imageAnalysis: {
         titulo: analysis.contenido.titulo,
         tema: analysis.contenido.tema,
@@ -352,15 +384,24 @@ export class AiService {
     message: string,
     teacherId: string | undefined,
     onChunk: (chunk: string) => Promise<void> | void,
+    depth?: string,
   ) {
+    const chatDepth = normalizeChatDepth(depth);
     const conv = await this.ensureConversation(userId, conversationId);
     if (!conv) throw new Error('Failed to create or fetch conversation');
 
     const sessionStartedAt = new Date();
     await this.persistUserMessage(conv._id, userId, message);
 
-    const prep = await this.prepareInteraction(userId, conv._id, message, sessionStartedAt);
-    const messagesForModel = await this.buildModelPrompt(userId, prep, message);
+    const prep = await this.prepareInteraction(
+      userId,
+      conv._id,
+      message,
+      sessionStartedAt,
+      chatDepth,
+      teacherId,
+    );
+    const messagesForModel = await this.buildModelPrompt(prep, message);
 
     let finalContent = '';
     let usedModel: string | null = null;
@@ -379,11 +420,13 @@ export class AiService {
     }
 
     await this.persistAssistantMessage(conv._id, userId, finalContent, null, usedModel);
-    await this.autoGenerateTitle(conv, message);
+    void this.autoGenerateTitle(conv, message);
 
-    await this.finalizeInteraction(userId, conv._id, message, prep, sessionStartedAt);
+    if (chatDepth !== 'low') {
+      await this.finalizeInteraction(userId, conv._id, message, prep, sessionStartedAt);
+    }
 
-    return { conversationId: conv._id, reply: finalContent };
+    return { conversationId: conv._id, reply: finalContent, depth: chatDepth };
   }
 
   /**
@@ -458,13 +501,15 @@ export class AiService {
     await this.conversations.updateOne({ _id: conversationId }, { $inc: { messageCount: 1 }, $set: { lastMessageAt: new Date() } });
   }
 
-  private async prepareInteraction(userId: number, conversationId: any, message: string, sessionStartedAt: Date) {
-    const academicContext = await this.academicService.buildAcademicContext(userId);
-    const teacherProfile = await this.teacherProfileService.detectProfile(message, academicContext);
+  private async prepareInteraction(
+    userId: number,
+    conversationId: any,
+    message: string,
+    sessionStartedAt: Date,
+    depth: ChatDepth,
+    teacherId?: string,
+  ) {
     const promptTemplate = this.promptTemplateService.detectIntent(message);
-
-    const detectedSubject = this.detectSubjectFromMessage(message, academicContext);
-    await this.learningAnalyticsService.recordQuestion(userId, detectedSubject);
 
     const historyCursor = this.messages.find({ conversationId }).sort({ createdAt: 1 }).limit(50);
     const history = await historyCursor.toArray();
@@ -480,6 +525,39 @@ export class AiService {
           : m.content,
       };
     });
+
+    // Low Flash: solo conversación. Nada de consultas de perfil, memorias,
+    // brechas, analytics ni generación automática de recursos.
+    if (depth === 'low') {
+      const teacherProfile = await this.resolveTeacherProfile(userId, teacherId, message, null);
+      return {
+        userId,
+        depth,
+        academicContext: null,
+        teacherProfile,
+        promptTemplate,
+        conversationContext,
+        contextText: '',
+        teachingMode: null,
+        memories: [],
+        knowledgeGaps: [],
+        analytics: null,
+        currentStudentModel: null,
+        adaptive: null,
+        generatedResourceIds: [],
+        learningGoals: [],
+        sessionStartedAt,
+      };
+    }
+
+    const academicContext = await this.academicService.buildAcademicContext(userId);
+    const teacherProfile = await this.resolveTeacherProfile(userId, teacherId, message, academicContext);
+
+    const detectedSubject = this.detectSubjectFromMessage(message, academicContext);
+    await this.learningAnalyticsService.recordQuestion(userId, detectedSubject);
+
+    // Contexto compacto según el modo (perfil + progreso + apuntes).
+    const contextText = await this.chatContext.build(userId, depth, message, teacherProfile);
 
     const memories: any = await this.memoryService.getRelevantMemories(userId, message, 10);
 
@@ -507,28 +585,42 @@ export class AiService {
     }
 
     if (adaptive?.triggers?.length) {
-      try {
-        const generated = await this.adaptiveLearningService.generateAutomaticResources(
-          userId,
-          conversationId,
-          adaptive,
-          message,
-          academicContext,
-          currentStudentModel,
-          knowledgeGaps,
-          { learningGoals, teacherProfile },
-        );
-        generatedResourceIds = Object.values(generated?.ids || {}).map((id) => String(id));
-      } catch (err) {
-        this.logger.warn('Automatic resource generation failed: ' + err);
+      // Solo se generan recursos cuando el estudiante los pide explícitamente
+      // ("hazme un quiz", "genera flashcards"...). Antes cualquier mención de
+      // "examen" o "parcial" disparaba una generación con IA antes de responder:
+      // eso añadía latencia y gastaba tokens sin que el estudiante lo pidiera.
+      const explicitRequest = adaptive.triggers.some(
+        (trigger: any) => trigger.type === 'EXPLICIT_REQUEST',
+      );
+
+      if (explicitRequest) {
+        try {
+          const generated = await this.adaptiveLearningService.generateAutomaticResources(
+            userId,
+            conversationId,
+            adaptive,
+            message,
+            academicContext,
+            currentStudentModel,
+            knowledgeGaps,
+            { learningGoals, teacherProfile },
+          );
+          generatedResourceIds = Object.values(generated?.ids || {}).map((id) => String(id));
+        } catch (err) {
+          this.logger.warn('Automatic resource generation failed: ' + err);
+        }
       }
     }
 
     return {
+      userId,
+      depth,
       academicContext,
       teacherProfile,
       promptTemplate,
       conversationContext,
+      contextText,
+      teachingMode: this.summarizeTeachingMode(adaptive),
       memories,
       knowledgeGaps,
       analytics,
@@ -540,36 +632,62 @@ export class AiService {
     };
   }
 
-  private async buildModelPrompt(
+  /**
+   * Usa el profesor que el estudiante eligió en la interfaz. Si no llega
+   * `teacherId`, se detecta por el mensaje como antes.
+   */
+  private async resolveTeacherProfile(
     userId: number,
-    prep: any,
+    teacherId: string | undefined,
     message: string,
-    attachmentsContext?: string,
+    academicContext: any,
   ) {
-    const memForPrompt = (prep.memories || []).map((m: any) => ({
-      type: String(m.type || ''),
-      key: String(m.key || m.type || ''),
-      value: String(m.value || ''),
-    }));
-    const gapsForPrompt = (prep.knowledgeGaps || []).map((g: any) => ({
-      topic: String(g.topic || g.name || ''),
-      subject: g.subject,
-      confidence: g.confidence,
-      status: g.status,
-    }));
+    if (teacherId) {
+      const profile = await this.teacherProfileService.getByCode(teacherId);
+      // Un perfil personalizado solo puede usarlo su dueño.
+      if (profile && (!profile.userId || profile.userId === userId)) {
+        return profile;
+      }
+    }
+    return this.teacherProfileService.detectProfile(message, academicContext || {});
+  }
 
-    return this.promptBuilder.buildPrompt(
-      userId,
-      prep.conversationContext,
-      message,
-      memForPrompt,
-      prep.teacherProfile,
-      prep.promptTemplate,
-      gapsForPrompt,
-      prep.currentStudentModel,
-      prep.adaptive,
+  /** Resume la estrategia adaptativa a una línea; no se envía el objeto entero. */
+  private summarizeTeachingMode(adaptive: any): string | null {
+    if (!adaptive) return null;
+
+    const isExamMode =
+      adaptive.mode === 'COACH' ||
+      (adaptive.triggers || []).some((trigger: any) => trigger.type === 'EXAM_MODE');
+    const pieces: string[] = [];
+
+    if (isExamMode) {
+      pieces.push('EXAM_MODE: prioriza lo evaluable, simulacros y repaso express.');
+    } else if (adaptive.mode) {
+      pieces.push(String(adaptive.mode));
+    }
+
+    const weaknesses = (adaptive.predictedWeaknesses || [])
+      .map((item: any) => item?.topic)
+      .filter(Boolean)
+      .slice(0, 3);
+    if (weaknesses.length) pieces.push(`Temas débiles: ${weaknesses.join(', ')}`);
+
+    return pieces.length ? pieces.join('\n') : null;
+  }
+
+  private async buildModelPrompt(prep: any, message: string, attachmentsContext?: string) {
+    return this.promptBuilder.buildPrompt({
+      userId: prep.userId,
+      conversationContext: prep.conversationContext,
+      userMessage: message,
+      depth: prep.depth,
+      contextText: prep.contextText,
+      teacherProfile: prep.teacherProfile,
+      promptTemplate: prep.promptTemplate,
+      teachingMode: prep.teachingMode,
       attachmentsContext,
-    );
+    });
   }
 
   /** Resumen de las imágenes ya analizadas que viaja en el historial. */

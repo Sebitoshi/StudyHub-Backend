@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { CHAT_DEPTH_VALUES } from '../context/chat-depth';
 
 /**
  * Conversación con el Profesor IA a partir de una imagen ya procesada por el
@@ -68,4 +69,14 @@ export class ChatWithImageDto {
   @IsString()
   @MaxLength(20)
   nivel?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Profundidad del contexto del chat: low, medium, max o maxpro.',
+    enum: CHAT_DEPTH_VALUES,
+    default: 'medium',
+  })
+  @IsOptional()
+  @IsIn(CHAT_DEPTH_VALUES)
+  depth?: string;
 }
