@@ -1,20 +1,23 @@
 /**
  * Profundidad del contexto que el Profesor IA recibe en cada mensaje.
  *
+ * - auto   (Auto):      por defecto. Detecta el profesor y la materia que el
+ *                       estudiante necesita y se adapta automáticamente.
  * - low    (Low Flash): solo la conversación. Sin datos del estudiante.
- * - medium (Medium):    perfil académico básico + progreso en quizzes,
+ * - medium (Medium):     perfil académico básico + progreso en quizzes,
  *                       rutas y simulacros.
- * - max    (Max):       lo anterior + apuntes de las materias del profesor
+ * - max    (Max):        lo anterior + apuntes de las materias del profesor
  *                       que el estudiante eligió.
- * - maxpro (Max Pro):   lo anterior + apuntes de cualquier materia (los dos
+ * - maxpro (Max Pro):    lo anterior + apuntes de cualquier materia (los dos
  *                       más recientes por materia, priorizando los que se
  *                       relacionan con la pregunta).
  */
-export type ChatDepth = 'low' | 'medium' | 'max' | 'maxpro';
+export type ChatDepth = 'auto' | 'low' | 'medium' | 'max' | 'maxpro';
 
-export const CHAT_DEPTH_VALUES: ChatDepth[] = ['low', 'medium', 'max', 'maxpro'];
+export const CHAT_DEPTH_VALUES: ChatDepth[] = ['auto', 'low', 'medium', 'max', 'maxpro'];
 
 export const CHAT_DEPTH_LABELS: Record<ChatDepth, string> = {
+  auto: 'Auto',
   low: 'Low Flash',
   medium: 'Medium',
   max: 'Max',
@@ -27,7 +30,8 @@ export function normalizeChatDepth(value?: string | null): ChatDepth {
     .toLowerCase()
     .replace(/[\s_-]+/g, '');
 
-  if (!normalized) return 'medium';
+  if (!normalized) return 'auto';
+  if (normalized === 'auto' || normalized === 'automatico') return 'auto';
   if (normalized === 'low' || normalized === 'flash' || normalized === 'lowflash' || normalized === 'rapido') {
     return 'low';
   }
@@ -37,5 +41,7 @@ export function normalizeChatDepth(value?: string | null): ChatDepth {
   if (normalized === 'max' || normalized === 'high' || normalized === 'maximo') {
     return 'max';
   }
-  return 'medium';
+  if (normalized === 'medium' || normalized === 'medio') return 'medium';
+  // Por defecto: modo automático.
+  return 'auto';
 }

@@ -529,7 +529,7 @@ export class AiService {
     // Low Flash: solo conversación. Nada de consultas de perfil, memorias,
     // brechas, analytics ni generación automática de recursos.
     if (depth === 'low') {
-      const teacherProfile = await this.resolveTeacherProfile(userId, teacherId, message, null);
+      const teacherProfile = await this.resolveTeacherProfile(userId, teacherId, message, null, 'low');
       return {
         userId,
         depth,
@@ -551,7 +551,15 @@ export class AiService {
     }
 
     const academicContext = await this.academicService.buildAcademicContext(userId);
-    const teacherProfile = await this.resolveTeacherProfile(userId, teacherId, message, academicContext);
+    // Auto: detecta el profesor/materia que necesita el estudiante en esta
+    // conversación. Los demás modos respetan el profesor elegido en la UI.
+    const teacherProfile = await this.resolveTeacherProfile(
+      userId,
+      teacherId,
+      message,
+      academicContext,
+      depth,
+    );
 
     const detectedSubject = this.detectSubjectFromMessage(message, academicContext);
     await this.learningAnalyticsService.recordQuestion(userId, detectedSubject);
@@ -634,16 +642,18 @@ export class AiService {
   }
 
   /**
-   * Usa el profesor que el estudiante eligió en la interfaz. Si no llega
-   * `teacherId`, se detecta por el mensaje como antes.
+   * Usa el profesor que el estudiante eligió en la interfaz. Si el modo es
+   * `auto`, en cambio, detecta automáticamente el profesor/materia que necesita
+   * el estudiante a partir del mensaje y de sus materias.
    */
   private async resolveTeacherProfile(
     userId: number,
     teacherId: string | undefined,
     message: string,
     academicContext: any,
+    depth?: ChatDepth,
   ) {
-    if (teacherId) {
+    if (depth !== 'auto' && teacherId) {
       const profile = await this.teacherProfileService.getByCode(teacherId);
       // Un perfil personalizado solo puede usarlo su dueño.
       if (profile && (!profile.userId || profile.userId === userId)) {

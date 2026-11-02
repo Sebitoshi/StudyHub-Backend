@@ -84,7 +84,7 @@ export class ChatContextService {
       if (progress) sections.push(progress);
       if (roadmaps) sections.push(roadmaps);
 
-      if (depth === 'max') {
+      if (depth === 'max' || depth === 'auto') {
         const notes = await this.loadNotesForTeacher(userId, teacher);
         if (notes) sections.push(notes);
       } else if (depth === 'maxpro') {

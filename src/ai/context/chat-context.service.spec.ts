@@ -128,6 +128,29 @@ describe('ChatContextService', () => {
     expect(context).not.toContain('Apuntes');
   });
 
+  it('en auto usa el profesor detectado y añade los apuntes al contexto', async () => {
+    prisma.subject.findMany.mockResolvedValue([
+      { id: 1, nombre: 'Cálculo diferencial', profesor: 'Gómez' },
+    ]);
+    prisma.note.findMany.mockResolvedValue([
+      {
+        title: 'Derivadas',
+        content: 'Regla de la cadena.',
+        updatedAt: new Date('2026-10-20'),
+        subjectId: 1,
+        subject: { nombre: 'Cálculo diferencial' },
+      },
+    ]);
+
+    const context = await service.build(1, 'auto', 'explica las derivadas', {
+      name: 'Profesor de Matemáticas',
+      subjects: ['calculo'],
+    });
+
+    expect(context).toContain('Derivadas');
+    expect(context).toContain('Apuntes');
+  });
+
   it('en maxpro toma hasta dos apuntes por materia y prioriza los de la pregunta', async () => {
     prisma.subject.findMany.mockResolvedValue([
       { id: 1, nombre: 'Cálculo', profesor: 'Gómez' },
@@ -174,7 +197,9 @@ describe('ChatContextService', () => {
 });
 
 describe('normalizeChatDepth', () => {
-  it('acepta alias y cae en medium por defecto', () => {
+  it('acepta alias y cae en auto por defecto', () => {
+    expect(normalizeChatDepth('auto')).toBe('auto');
+    expect(normalizeChatDepth('Automatico')).toBe('auto');
     expect(normalizeChatDepth('low')).toBe('low');
     expect(normalizeChatDepth('Low Flash')).toBe('low');
     expect(normalizeChatDepth('flash')).toBe('low');
@@ -182,7 +207,7 @@ describe('normalizeChatDepth', () => {
     expect(normalizeChatDepth('max')).toBe('max');
     expect(normalizeChatDepth('max-pro')).toBe('maxpro');
     expect(normalizeChatDepth('Max Pro')).toBe('maxpro');
-    expect(normalizeChatDepth(undefined)).toBe('medium');
-    expect(normalizeChatDepth('otro')).toBe('medium');
+    expect(normalizeChatDepth(undefined)).toBe('auto');
+    expect(normalizeChatDepth('otro')).toBe('auto');
   });
 });

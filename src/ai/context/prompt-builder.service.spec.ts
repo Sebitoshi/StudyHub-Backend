@@ -37,6 +37,21 @@ describe('PromptBuilderService', () => {
     expect(joined).not.toContain('StudentProfile');
   });
 
+  it('en auto indica que el contexto se detecta automáticamente', async () => {
+    const messages = await builder.buildPrompt({
+      userId: 2,
+      depth: 'auto',
+      userMessage: '¿cómo voy?',
+      contextText: 'Perfil académico:\nCarrera: Ingeniería',
+      conversationContext: [],
+    });
+
+    const joined = messages.map((message) => message.content).join('\n');
+    expect(joined).toContain('StudentContext (modo Auto');
+    expect(joined).toContain('Carrera: Ingeniería');
+    expect(joined).not.toContain('RelevantMemories');
+  });
+
   it('limita el historial a los últimos 8 mensajes', async () => {
     const conversationContext = Array.from({ length: 12 }, (_, index) => ({
       role: index % 2 ? 'assistant' : 'user',
