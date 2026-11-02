@@ -16,6 +16,14 @@ import { VerificationTokenType } from '../common/enums';
 import { RegisterDto } from './dto/register-auth.dto';
 import { LoginDto } from './dto/login-auth.dto';
 
+/** Duración de la sesión deslizante: cada uso renueva otros 30 días. */
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export interface SessionMeta {
+  deviceInfo?: string | null;
+  ipAddress?: string | null;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -31,7 +39,7 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, meta: SessionMeta = {}) {
     this.logger.log(`Register attempt for email: ${dto.email}`);
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -64,10 +72,10 @@ export class AuthService {
     await this.mailService.sendVerificationCode(user.email, code);
     this.logger.log(`User registered successfully: ${user.email} (id: ${user.id})`);
 
-    return this.generateToken(user);
+    return this.issueTokens(user, meta);
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, meta: SessionMeta = {}) {
     this.logger.log(`Login attempt for email: ${dto.email}`);
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -93,15 +101,18 @@ export class AuthService {
     await this.gamificationService.updateStreak(user.id);
     this.logger.log(`Login successful for ${dto.email} (id: ${user.id})`);
 
-    return this.generateToken(user);
+    return this.issueTokens(user, meta);
   }
 
-  async validateGoogleUser(profile: {
-    email: string;
-    nombre: string;
-    apellido: string;
-    googleId: string;
-  }) {
+  async validateGoogleUser(
+    profile: {
+      email: string;
+      nombre: string;
+      apellido: string;
+      googleId: string;
+    },
+    meta: SessionMeta = {},
+  ) {
     let user = await this.prisma.user.findFirst({
       where: { OR: [{ email: profile.email }, { googleId: profile.googleId }] },
     });
@@ -127,7 +138,7 @@ export class AuthService {
 
     await this.gamificationService.updateStreak(user.id);
 
-    return this.generateToken(user);
+    return this.issueTokens(user, meta);
   }
 
   async verifyEmail(email: string, code: string) {
@@ -254,24 +265,136 @@ export class AuthService {
     return { message: 'Contraseña actualizada correctamente' };
   }
 
-  private generateToken(user: {
-    id: number;
-    email: string;
-    nombre: string;
-    apellido: string;
-    foto?: string | null;
-  }) {
-    const payload = { sub: user.id, email: user.email };
+  /**
+   * Renueva el token de acceso a partir del refresh token.
+   * El refresh token rota en cada uso (rotación de un solo uso) para que un
+   * token robado deje de servir en cuanto el dueño legítimo renueve.
+   */
+  async refresh(refreshToken: string, meta: SessionMeta = {}) {
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      throw new UnauthorizedException('Sesión no válida');
+    }
+
+    const session = await this.prisma.userSession.findFirst({
+      where: { refreshToken: this.hashRefreshToken(refreshToken) },
+    });
+
+    if (!session) {
+      throw new UnauthorizedException('Sesión expirada. Inicia sesión de nuevo.');
+    }
+
+    const expiredAt = session.lastActiveAt.getTime() + REFRESH_TOKEN_TTL_MS;
+    if (Date.now() > expiredAt) {
+      await this.deleteSession(session.id);
+      throw new UnauthorizedException('Sesión expirada. Inicia sesión de nuevo.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: session.userId },
+    });
+
+    if (!user || !user.isActive || user.isBanned) {
+      await this.deleteSession(session.id);
+      throw new UnauthorizedException('Sesión no válida');
+    }
+
+    const rotatedToken = crypto.randomBytes(48).toString('hex');
+    await this.prisma.userSession.update({
+      where: { id: session.id },
+      data: {
+        refreshToken: this.hashRefreshToken(rotatedToken),
+        lastActiveAt: new Date(),
+        deviceInfo: this.normalizeDeviceInfo(meta.deviceInfo) ?? session.deviceInfo,
+        ipAddress: meta.ipAddress ?? session.ipAddress,
+      },
+    });
+
+    this.logger.log(`Session refreshed for user ${user.id} (session ${session.id})`);
 
     return {
-      access_token: this.jwtService.sign(payload),
-      user: {
-        id: user.id,
-        nombre: user.nombre,
-        apellido: user.apellido,
-        email: user.email,
-        foto: user.foto ?? null,
-      },
+      access_token: this.jwtService.sign({ sub: user.id, email: user.email }),
+      refresh_token: rotatedToken,
+      user: this.publicUser(user),
     };
+  }
+
+  /** Cierra una sesión concreta (revoca su refresh token). */
+  async logout(refreshToken?: string) {
+    if (refreshToken) {
+      await this.prisma.userSession.deleteMany({
+        where: { refreshToken: this.hashRefreshToken(refreshToken) },
+      });
+    }
+
+    return { message: 'Sesión cerrada correctamente' };
+  }
+
+  private async issueTokens(
+    user: {
+      id: number;
+      email: string;
+      nombre: string;
+      apellido: string;
+      foto?: string | null;
+    },
+    meta: SessionMeta = {},
+  ) {
+    const refreshToken = crypto.randomBytes(48).toString('hex');
+
+    await this.prisma.userSession.create({
+      data: {
+        userId: user.id,
+        refreshToken: this.hashRefreshToken(refreshToken),
+        deviceInfo: this.normalizeDeviceInfo(meta.deviceInfo),
+        ipAddress: meta.ipAddress ?? null,
+      },
+    });
+
+    // Limpieza oportunista de sesiones caducadas (no bloquea el login).
+    const cutoff = new Date(Date.now() - REFRESH_TOKEN_TTL_MS);
+    this.prisma.userSession
+      .deleteMany({ where: { userId: user.id, lastActiveAt: { lt: cutoff } } })
+      .catch((error) =>
+        this.logger.warn(`No se pudieron limpiar sesiones antiguas: ${error}`),
+      );
+
+    return {
+      access_token: this.jwtService.sign({ sub: user.id, email: user.email }),
+      refresh_token: refreshToken,
+      user: this.publicUser(user),
+    };
+  }
+
+  private publicUser(user: {
+    id: number;
+    nombre: string;
+    apellido: string;
+    email: string;
+    foto?: string | null;
+  }) {
+    return {
+      id: user.id,
+      nombre: user.nombre,
+      apellido: user.apellido,
+      email: user.email,
+      foto: user.foto ?? null,
+    };
+  }
+
+  private hashRefreshToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private normalizeDeviceInfo(deviceInfo?: string | null): string | null {
+    if (!deviceInfo) return null;
+    return deviceInfo.slice(0, 255);
+  }
+
+  private async deleteSession(sessionId: number): Promise<void> {
+    try {
+      await this.prisma.userSession.delete({ where: { id: sessionId } });
+    } catch (error) {
+      this.logger.warn(`No se pudo eliminar la sesión ${sessionId}: ${error}`);
+    }
   }
 }

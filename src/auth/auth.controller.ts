@@ -1,14 +1,16 @@
 import { Body, Controller, Get, Logger, Post, Req, Res, UseGuards, HttpCode } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { AuthService } from './auth.service';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { AuthService, SessionMeta } from './auth.service';
 import { LoginDto } from './dto/login-auth.dto';
 import { RegisterDto } from './dto/register-auth.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendCodeDto } from './dto/resend-code.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { LogoutDto } from './dto/logout.dto';
 import type { Request, Response } from 'express';
 
 @ApiTags('Auth')
@@ -25,8 +27,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Registrar un nuevo usuario' })
   @ApiResponse({ status: 201, description: 'Usuario registrado exitosamente' })
   @ApiResponse({ status: 400, description: 'Datos inválidos o email ya registrado' })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  register(@Body() dto: RegisterDto, @Req() req: Request) {
+    return this.authService.register(dto, this.sessionMeta(req));
   }
 
   @Post('login')
@@ -44,8 +46,17 @@ export class AuthController {
     },
   })
   @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    return this.authService.login(dto, this.sessionMeta(req));
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Renovar el token de acceso con el refresh token' })
+  @ApiResponse({ status: 200, description: 'Token renovado correctamente' })
+  @ApiResponse({ status: 401, description: 'Refresh token inválido o expirado' })
+  refresh(@Body() dto: RefreshTokenDto, @Req() req: Request) {
+    return this.authService.refresh(dto.refresh_token, this.sessionMeta(req));
   }
 
   @Post('verify-email')
@@ -76,12 +87,19 @@ export class AuthController {
   @ApiResponse({ status: 302, description: 'Redirección al frontend con token' })
   @ApiResponse({ status: 401, description: 'Autenticación con Google fallida' })
   googleCallback(@Req() req: Request, @Res() res: Response) {
-    const result = req.user as { access_token: string; user: Record<string, unknown> };
+    const result = req.user as {
+      access_token: string;
+      refresh_token: string;
+      user: Record<string, unknown>;
+    };
     const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:4200';
-    const token = result.access_token;
+    const token = encodeURIComponent(result.access_token);
+    const refresh = encodeURIComponent(result.refresh_token);
     const user = encodeURIComponent(JSON.stringify(result.user));
     this.logger.log(`Google OAuth callback, redirecting to frontend`);
-    return res.redirect(`${frontendUrl}/auth/callback?token=${token}&user=${user}`);
+    return res.redirect(
+      `${frontendUrl}/auth/callback?token=${token}&refresh=${refresh}&user=${user}`,
+    );
   }
 
   @Post('forgot-password')
@@ -104,11 +122,22 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(200)
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Cerrar sesión' })
+  @ApiOperation({ summary: 'Cerrar sesión y revocar el refresh token' })
   @ApiResponse({ status: 200, description: 'Sesión cerrada exitosamente' })
-  logout() {
-    return { message: 'Sesión cerrada correctamente' };
+  logout(@Body() dto: LogoutDto) {
+    return this.authService.logout(dto?.refresh_token);
+  }
+
+  private sessionMeta(req: Request): SessionMeta {
+    const forwarded = req.headers['x-forwarded-for'];
+    const ipAddress =
+      (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim() ||
+      req.ip ||
+      null;
+
+    return {
+      deviceInfo: req.headers['user-agent'] ?? null,
+      ipAddress,
+    };
   }
 }

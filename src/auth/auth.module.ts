@@ -18,7 +18,8 @@ import { MailModule } from '../mail/mail.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '7d' },
+        // Token corto: el frontend lo renueva en silencio con /auth/refresh.
+        signOptions: { expiresIn: '1h' },
       }),
       inject: [ConfigService],
     }),

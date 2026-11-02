@@ -463,6 +463,14 @@ export class ProfileService {
     return this.prisma.userSession.findMany({
       where: { userId },
       orderBy: { lastActiveAt: 'desc' },
+      // Nunca exponer el hash del refresh token al cliente.
+      select: {
+        id: true,
+        deviceInfo: true,
+        ipAddress: true,
+        lastActiveAt: true,
+        createdAt: true,
+      },
     });
   }
 
