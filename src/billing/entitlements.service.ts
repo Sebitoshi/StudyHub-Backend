@@ -20,7 +20,7 @@ export type PremiumFeature = 'image' | 'document' | 'depth';
 
 export interface ChatAccessOptions {
   depth?: string;
-  /** Función premium independiente de la profundidad (imagen/documento). */
+  /** Función que consume un crédito premium (imagen/PDF/análisis). */
   premiumOnly?: PremiumFeature | false;
 }
 
@@ -28,9 +28,11 @@ export interface AccountSnapshot {
   planCode: string;
   planName: string;
   premium: boolean;
-  dailyCredits: number | null;
-  used: number;
-  remaining: number | null;
+  /** Mensajes de chat permitidos por día. -1 = ilimitados. */
+  dailyCredits: number;
+  /** Usos diarios para imágenes, PDF y análisis. -1 = ilimitados. */
+  premiumDailyUses: number;
+  chatUsed: number;
   premiumUsed: number;
   subscription: {
     status: string;
@@ -100,16 +102,14 @@ export class EntitlementsService {
     }
 
     const plan = this.resolvePlan(subscription);
-    const used = usage?.messages ?? 0;
-    const unlimited = plan.dailyCredits === UNLIMITED_CREDITS;
 
     return {
       planCode: plan.code,
       planName: plan.name,
       premium: plan.premium,
-      dailyCredits: unlimited ? null : plan.dailyCredits,
-      used,
-      remaining: unlimited ? null : Math.max(0, plan.dailyCredits - used),
+      dailyCredits: plan.chatDailyCredits,
+      premiumDailyUses: plan.premiumDailyUses,
+      chatUsed: usage?.messages ?? 0,
       premiumUsed: usage?.premiumUses ?? 0,
       subscription: subscription
         ? {
@@ -129,16 +129,16 @@ export class EntitlementsService {
       planCode: plan.code,
       planName: plan.name,
       premium: false,
-      dailyCredits: plan.dailyCredits,
-      used: 0,
-      remaining: plan.dailyCredits,
+      dailyCredits: plan.chatDailyCredits,
+      premiumDailyUses: plan.premiumDailyUses,
+      chatUsed: 0,
       premiumUsed: 0,
       subscription: null,
     };
   }
 
   private paymentRequired(
-    code: 'PREMIUM_REQUIRED' | 'AI_DAILY_LIMIT_REACHED',
+    code: 'PREMIUM_REQUIRED' | 'AI_DAILY_LIMIT_REACHED' | 'PREMIUM_DAILY_LIMIT_REACHED',
     message: string,
     extra: Record<string, unknown> = {},
   ): HttpException {
@@ -155,33 +155,52 @@ export class EntitlementsService {
   }
 
   /**
-   * Verifica que el usuario pueda usar el chat antes de llamar al modelo.
-   * Lanza 402 si la función es premium o si agotó sus créditos del día.
+   * Verifica que el usuario pueda usar la IA antes de llamar al modelo.
+   * Lanza 402 si pide un modo exclusivo de Premium o si agotó alguno de sus
+   * cupos diarios (50 mensajes de chat / 25 usos de imágenes, PDF y análisis).
    */
   async assertChatAccess(
     userId: number,
     options: ChatAccessOptions = {},
   ): Promise<AccountSnapshot> {
     const account = await this.getAccount(userId);
-    const wantsPremium =
-      Boolean(options.premiumOnly) ||
-      PREMIUM_DEPTHS.has(normalizeChatDepth(options.depth));
+    const premiumDepth = PREMIUM_DEPTHS.has(normalizeChatDepth(options.depth));
+    const usesPremiumQuota = premiumDepth || Boolean(options.premiumOnly);
 
-    if (wantsPremium && !account.premium) {
+    if (premiumDepth && !account.premium) {
       throw this.paymentRequired(
         'PREMIUM_REQUIRED',
-        'Esta función requiere el plan Premium.',
+        'Los modos Max y Max Pro requieren el plan Premium.',
         { premiumOnly: true },
       );
     }
 
-    if (account.dailyCredits !== null && account.used >= account.dailyCredits) {
+    if (
+      usesPremiumQuota &&
+      account.premiumDailyUses !== UNLIMITED_CREDITS &&
+      account.premiumUsed >= account.premiumDailyUses
+    ) {
+      throw this.paymentRequired(
+        'PREMIUM_DAILY_LIMIT_REACHED',
+        `Agotaste tus ${account.premiumDailyUses} usos diarios de imágenes, PDF y análisis. Se renuevan mañana.`,
+        {
+          premiumDailyUses: account.premiumDailyUses,
+          premiumUsed: account.premiumUsed,
+          resetAt: new Date(usageDayKey().getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        },
+      );
+    }
+
+    if (
+      account.dailyCredits !== UNLIMITED_CREDITS &&
+      account.chatUsed >= account.dailyCredits
+    ) {
       throw this.paymentRequired(
         'AI_DAILY_LIMIT_REACHED',
-        'Agotaste tus créditos diarios del chat IA. Se renuevan mañana.',
+        `Agotaste tus ${account.dailyCredits} mensajes diarios de chat. Se renuevan mañana.`,
         {
           dailyCredits: account.dailyCredits,
-          used: account.used,
+          chatUsed: account.chatUsed,
           resetAt: new Date(usageDayKey().getTime() + 24 * 60 * 60 * 1000).toISOString(),
         },
       );

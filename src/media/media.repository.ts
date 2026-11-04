@@ -33,12 +33,28 @@ export interface StoredImage {
   _id: ObjectId;
   userId: number;
   kind: string;
+  /** Solo en imágenes de apuntes: materia y nota a la que pertenecen. */
+  subjectId?: number | null;
+  noteId?: number | null;
   mime: ImageMime;
   width: number;
   height: number;
   bytes: number;
   hash: string;
   data: Buffer;
+  createdAt: Date;
+}
+
+/** Metadatos de una imagen de apunte: sin los bytes, para listar rápido. */
+export interface NoteImageRow {
+  _id: string;
+  subjectId: number | null;
+  noteId: number | null;
+  mime: ImageMime;
+  width: number;
+  height: number;
+  bytes: number;
+  hash: string;
   createdAt: Date;
 }
 
@@ -146,5 +162,60 @@ export class MediaRepository {
 
   async deleteImageById(id: ObjectId): Promise<void> {
     await this.images.deleteOne({ _id: id });
+  }
+
+  // ── Imágenes de apuntes ────────────────────────────────────
+
+  /** Metadatos de las imágenes de varios apuntes a la vez (una sola consulta). */
+  async listNoteImages(userId: number, noteIds: number[]): Promise<NoteImageRow[]> {
+    const rows = await this.images
+      .find({ userId, kind: 'note', noteId: { $in: noteIds } })
+      .project({ data: 0 })
+      .sort({ createdAt: 1 })
+      .toArray();
+    return rows.map((row: any) => ({
+      _id: String(row._id),
+      subjectId: row.subjectId ?? null,
+      noteId: row.noteId ?? null,
+      mime: row.mime,
+      width: row.width,
+      height: row.height,
+      bytes: row.bytes,
+      hash: row.hash,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async countNoteImages(noteId: number): Promise<number> {
+    return this.images.countDocuments({ kind: 'note', noteId });
+  }
+
+  /** Liga imágenes sueltas al apunte; nunca toca imágenes de otro usuario o materia. */
+  async attachImagesToNote(
+    userId: number,
+    ids: ObjectId[],
+    noteId: number,
+    subjectId: number,
+  ): Promise<number> {
+    const result = await this.images.updateMany(
+      { _id: { $in: ids }, userId, kind: 'note', subjectId },
+      { $set: { noteId } },
+    );
+    return result.modifiedCount ?? 0;
+  }
+
+  async deleteNoteImage(userId: number, id: ObjectId): Promise<boolean> {
+    const result = await this.images.deleteOne({ _id: id, userId, kind: 'note' });
+    return (result.deletedCount ?? 0) > 0;
+  }
+
+  async deleteImagesForNote(userId: number, noteId: number): Promise<number> {
+    const result = await this.images.deleteMany({ userId, kind: 'note', noteId });
+    return result.deletedCount ?? 0;
+  }
+
+  async deleteImagesForSubject(userId: number, subjectId: number): Promise<number> {
+    const result = await this.images.deleteMany({ userId, kind: 'note', subjectId });
+    return result.deletedCount ?? 0;
   }
 }

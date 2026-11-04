@@ -4,10 +4,12 @@ import { AvatarsController } from './avatars.controller';
 import { MediaController } from './media.controller';
 import { MediaRepository } from './media.repository';
 import { MediaService } from './media.service';
+import { NoteImagesController } from './note-images.controller';
 
 @Module({
   imports: [MongoModule],
-  controllers: [MediaController, AvatarsController],
+  controllers: [MediaController, AvatarsController, NoteImagesController],
   providers: [MediaService, MediaRepository],
+  exports: [MediaService],
 })
 export class MediaModule {}

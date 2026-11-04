@@ -4,8 +4,12 @@
  * Los planes viven en código (no en base de datos) para que el precio y los
  * créditos se puedan ajustar con variables de entorno sin migraciones. Cada
  * suscripción guarda el `planCode` con el que se contrató.
+ *
+ * Vista de la cuenta gratis:
+ *   - Chat IA: 50 mensajes / día (1 crédito por mensaje).
+ *   - Créditos para imágenes, PDF y análisis: 25 usos / día (1 crédito por uso).
+ * Premium: chat ilimitado e imágenes/PDF/análisis ilimitados.
  */
-
 export const FREE_PLAN_CODE = 'FREE';
 export const PREMIUM_PLAN_CODE = 'PREMIUM';
 export const BILLING_CURRENCY = 'COP';
@@ -20,7 +24,9 @@ export interface BillingPlanDefinition {
   priceCop: number;
   currency: typeof BILLING_CURRENCY;
   /** Mensajes de chat permitidos por día. -1 = ilimitados. */
-  dailyCredits: number;
+  chatDailyCredits: number;
+  /** Usos premium diarios (imagen, PDF, análisis). -1 = ilimitados. */
+  premiumDailyUses: number;
   features: string[];
   premium: boolean;
 }
@@ -38,12 +44,15 @@ export function getFreePlan(): BillingPlanDefinition {
   return {
     code: FREE_PLAN_CODE,
     name: 'Gratis',
-    description: 'Chat con el tutor IA y contexto académico básico.',
+    description:
+      '50 mensajes de chat al día más 25 créditos diarios para imágenes, PDF y análisis.',
     priceCop: 0,
     currency: BILLING_CURRENCY,
-    dailyCredits: readIntEnv('AI_FREE_DAILY_CREDITS', 25),
+    chatDailyCredits: readIntEnv('AI_FREE_DAILY_CREDITS', 50),
+    premiumDailyUses: readIntEnv('AI_FREE_PREMIUM_USES', 25),
     features: [
-      'Chat con el tutor IA',
+      '50 mensajes de chat al día',
+      '25 créditos diarios para imágenes y PDF',
       'Contexto académico y progreso',
       'Apuntes y metas de aprendizaje',
     ],
@@ -56,14 +65,15 @@ export function getPremiumPlan(): BillingPlanDefinition {
     code: PREMIUM_PLAN_CODE,
     name: 'Premium',
     description:
-      'Chat sin límite, modos max/maxpro y análisis de imágenes y documentos.',
+      'Chat sin límite, modos max/maxpro y análisis de imágenes y documentos ilimitados.',
     priceCop: readIntEnv('AI_PREMIUM_PRICE_COP', 29900),
     currency: BILLING_CURRENCY,
-    dailyCredits: readIntEnv('AI_PREMIUM_DAILY_CREDITS', UNLIMITED_CREDITS),
+    chatDailyCredits: UNLIMITED_CREDITS,
+    premiumDailyUses: UNLIMITED_CREDITS,
     features: [
       'Chat IA sin límite diario',
       'Modos max y maxpro (apuntes completos)',
-      'Análisis de imágenes y documentos',
+      'Análisis de imágenes y documentos ilimitados',
       'Soporte prioritario',
     ],
     premium: true,

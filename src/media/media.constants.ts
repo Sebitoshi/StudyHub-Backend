@@ -12,3 +12,10 @@ export const MAX_IMAGE_DIMENSION = 2048;
 export const STALE_IMAGE_UPLOAD_MS = 30 * 60 * 1000;
 
 export const AVATAR_KIND = 'avatar';
+/** Imágenes incrustadas en los apuntes. */
+export const NOTE_KIND = 'note';
+
+export const SUPPORTED_IMAGE_KINDS = new Set([AVATAR_KIND, NOTE_KIND]);
+
+/** Tope de imágenes por apunte: evita apuntes inmanejables en móvil. */
+export const MAX_NOTE_IMAGES_PER_NOTE = 20;

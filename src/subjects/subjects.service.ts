@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GamificationService } from '../gamification/gamification.service';
+import { MediaService } from '../media/media.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
@@ -23,6 +24,7 @@ export class SubjectsService {
   constructor(
     private prisma: PrismaService,
     private gamification: GamificationService,
+    private media: MediaService,
   ) {}
 
   private async findSubjectOrThrow(subjectId: number, userId: number) {
@@ -59,11 +61,13 @@ export class SubjectsService {
   }
 
   async findOne(subjectId: number, userId: number) {
-    const subject = await this.findSubjectOrThrow(subjectId, userId);
-    return this.prisma.subject.findUnique({
+    await this.findSubjectOrThrow(subjectId, userId);
+    const subject = await this.prisma.subject.findUnique({
       where: { id: subjectId },
       include: { schedules: true, tasks: true, notes: true },
     });
+    if (!subject) throw new NotFoundException('Materia no encontrada');
+    return { ...subject, notes: await this.withNoteImages(userId, subject.notes) };
   }
 
   async update(subjectId: number, userId: number, dto: UpdateSubjectDto) {
@@ -78,6 +82,10 @@ export class SubjectsService {
     await this.findSubjectOrThrow(subjectId, userId);
     this.logger.log(`Deleting subject ${subjectId} for user ${userId}`);
     await this.prisma.subject.delete({ where: { id: subjectId } });
+    // Las imágenes viven en Mongo: Postgres no las borra en cascada.
+    await this.media.deleteImagesForSubject(userId, subjectId).catch((error) => {
+      this.logger.warn(`No se pudieron borrar las imágenes de la materia ${subjectId}: ${error}`);
+    });
     return { message: 'Materia eliminada' };
   }
 
@@ -215,19 +223,25 @@ export class SubjectsService {
 
   async createNote(subjectId: number, userId: number, dto: CreateNoteDto) {
     await this.findSubjectOrThrow(subjectId, userId);
+    const { imageIds, ...data } = dto;
     const note = await this.prisma.note.create({
-      data: { ...dto, subjectId },
+      data: { ...data, subjectId },
     });
+    if (imageIds?.length) {
+      await this.media.attachImagesToNote(userId, note.id, imageIds);
+    }
     await this.gamification.addXp(userId, 10, XpActionType.CREATE_NOTE);
-    return note;
+    const [withImages] = await this.withNoteImages(userId, [note]);
+    return withImages;
   }
 
   async findNotes(subjectId: number, userId: number) {
     await this.findSubjectOrThrow(subjectId, userId);
-    return this.prisma.note.findMany({
+    const notes = await this.prisma.note.findMany({
       where: { subjectId },
       orderBy: [{ isPinned: 'desc' }, { updatedAt: 'desc' }],
     });
+    return this.withNoteImages(userId, notes);
   }
 
   async updateNote(
@@ -241,10 +255,43 @@ export class SubjectsService {
       where: { id: noteId },
     });
     if (!note) throw new NotFoundException('Nota no encontrada');
-    return this.prisma.note.update({
+
+    const { imageIds, ...data } = dto;
+    const updated = await this.prisma.note.update({
       where: { id: noteId },
-      data: dto,
+      data,
     });
+    if (imageIds?.length) {
+      await this.media.attachImagesToNote(userId, updated.id, imageIds);
+    }
+
+    const [withImages] = await this.withNoteImages(userId, [updated]);
+    return withImages;
+  }
+
+  /**
+   * Adjunta a cada apunte sus imágenes (url, dimensiones) para que el frontend
+   * pueda mostrarlas, agrandarlas y abrirlas a pantalla completa.
+   */
+  private async withNoteImages<T extends { id: number }>(userId: number, notes: T[]) {
+    if (!notes.length) return notes.map((note) => ({ ...note, images: [] }));
+
+    const images = await this.media
+      .listNoteImages(userId, notes.map((note) => note.id))
+      .catch((error) => {
+        this.logger.warn(`No se pudieron leer las imágenes de los apuntes: ${error}`);
+        return [];
+      });
+
+    const byNote = new Map<number, typeof images>();
+    for (const image of images) {
+      if (image.noteId == null) continue;
+      const list = byNote.get(image.noteId) ?? [];
+      list.push(image);
+      byNote.set(image.noteId, list);
+    }
+
+    return notes.map((note) => ({ ...note, images: byNote.get(note.id) ?? [] }));
   }
 
   async togglePinNote(noteId: number, subjectId: number, userId: number) {
@@ -266,6 +313,9 @@ export class SubjectsService {
     });
     if (!note) throw new NotFoundException('Nota no encontrada');
     await this.prisma.note.delete({ where: { id: noteId } });
+    await this.media.deleteImagesForNote(userId, noteId).catch((error) => {
+      this.logger.warn(`No se pudieron borrar las imágenes de la nota ${noteId}: ${error}`);
+    });
     return { message: 'Nota eliminada' };
   }
 }
