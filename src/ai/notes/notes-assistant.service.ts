@@ -6,6 +6,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { AiProviderService } from '../ai-provider.service';
+import { MediaService } from '../../media/media.service';
+import { DocumentTextService } from '../document-text.service';
 import type { NoteAssistantAction } from '../../subjects/dto/note-assistant.dto';
 
 /** Entrada ya validada por el controlador (incluye el nombre de la materia). */
@@ -25,6 +27,10 @@ export interface NoteAssistantResult {
 
 /** Prefijo del apunte que se envía al modelo (≈ 3.000 tokens). */
 const MAX_CONTENT_CHARS = 12_000;
+/** Texto del PDF que se envía al modelo al generar un apunte (≈ 3.000 tokens). */
+const MAX_PDF_MATERIAL_CHARS = 12_000;
+/** Debajo de esto el PDF no da para un apunte decente. */
+const MIN_PDF_MATERIAL_CHARS = 200;
 const MAX_TITLE_CHARS = 200;
 const MAX_INSTRUCTION_CHARS = 600;
 
@@ -61,7 +67,11 @@ Reglas de salida:
 export class NotesAssistantService {
   private readonly logger = new Logger(NotesAssistantService.name);
 
-  constructor(private readonly ai: AiProviderService) {}
+  constructor(
+    private readonly ai: AiProviderService,
+    private readonly media: MediaService,
+    private readonly documents: DocumentTextService,
+  ) {}
 
   async suggest(input: NoteAssistantInput): Promise<NoteAssistantResult> {
     const title = (input.title || '').trim().slice(0, MAX_TITLE_CHARS);
@@ -111,7 +121,101 @@ export class NotesAssistantService {
     }
   }
 
+  /**
+   * Genera un apunte completo a partir del texto de un PDF del estudiante. El
+   * material se recorta a un presupuesto fijo para no disparar el costo.
+   */
+  async suggestFromPdf(
+    userId: number,
+    input: { fileId: string; title?: string; instruction?: string; subjectName?: string },
+  ): Promise<NoteAssistantResult> {
+    const file = await this.media.getNoteFileForUser(userId, input.fileId);
+    if (file.mime !== 'application/pdf') {
+      throw new BadRequestException('El archivo indicado no es un PDF.');
+    }
+
+    const doc = {
+      buffer: file.data,
+      size: file.bytes,
+      mimetype: 'application/pdf',
+      originalname: file.filename,
+      fieldname: 'file',
+      encoding: '7bit',
+    } as unknown as Express.Multer.File;
+
+    // Lanza 400 si el PDF no tiene texto seleccionable (p. ej. escaneado).
+    const raw = String((await this.documents.extractText(doc)) || '');
+    const material = raw.replace(/<\/?material>/gi, '').trim().slice(0, MAX_PDF_MATERIAL_CHARS);
+
+    if (material.length < MIN_PDF_MATERIAL_CHARS) {
+      throw new BadRequestException(
+        'El PDF tiene muy poco texto legible. Prueba con un documento con texto seleccionable.',
+      );
+    }
+
+    const title =
+      (input.title || '').trim().slice(0, MAX_TITLE_CHARS) ||
+      this.documents.guessTopic(doc, material);
+
+    const messages = this.buildPdfMessages({
+      material,
+      title,
+      instruction: (input.instruction || '').trim().slice(0, MAX_INSTRUCTION_CHARS),
+      subjectName: (input.subjectName || '').trim(),
+    });
+
+    const promptChars = messages.reduce((total, message) => total + message.content.length, 0);
+    // Estimación conservadora: ~4 caracteres por token + margen de seguridad.
+    const estimatedInputTokens = Math.ceil(promptChars / 4) + 120;
+    const maxTokens = Math.max(900, Math.min(2_600, TOKEN_BUDGET - estimatedInputTokens));
+
+    try {
+      const response = await this.ai.chat(messages, { maxTokens });
+      const proposal = this.sanitize(response.content);
+      if (!proposal) {
+        throw new HttpException(
+          'La IA no devolvió contenido. Inténtalo de nuevo.',
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+      return { proposal, action: 'draft', model: response.model };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.toFriendlyError(error);
+    }
+  }
+
   // ── Prompts ────────────────────────────────────────────────
+
+  private buildPdfMessages(input: {
+    material: string;
+    title: string;
+    instruction: string;
+    subjectName: string;
+  }): Array<{ role: string; content: string }> {
+    const context: string[] = [];
+    if (input.subjectName) context.push(`Materia: ${input.subjectName}`);
+    context.push(`Tema del apunte: «${input.title}»`);
+    if (input.instruction) {
+      context.push(`Indicación del estudiante (priorízala): ${input.instruction}`);
+    }
+
+    const task = `${context.join('\n')}\n\nConvierte el siguiente material de un PDF en un apunte de estudio autosuficiente.
+- Organízalo con títulos y subtítulos en el orden lógico del tema.
+- Explica con tus palabras: no copies párrafos enteros ni el índice.
+- Incluye definiciones, fórmulas en LaTeX, un ejemplo resuelto si el material lo permite y un cierre de repaso con tres preguntas.
+- No añadas datos, autores ni fuentes que no aparezcan en el material.
+- Extensión aproximada: 400 a 700 palabras.
+
+<material>
+${input.material}
+</material>`;
+
+    return [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: task },
+    ];
+  }
 
   private buildMessages(
     action: NoteAssistantAction,

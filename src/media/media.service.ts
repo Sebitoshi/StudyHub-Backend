@@ -632,6 +632,21 @@ export class MediaService {
     };
   }
 
+  /** Igual que `getNoteFile`, pero solo si el PDF pertenece al usuario. */
+  async getNoteFileForUser(
+    userId: number,
+    fileId: string,
+  ): Promise<{ filename: string; mime: string; bytes: number; data: Buffer }> {
+    if (!ObjectId.isValid(fileId)) {
+      throw new NotFoundException('Archivo no encontrado.');
+    }
+    const file = await this.repo.getNoteFileById(new ObjectId(fileId));
+    if (!file || file.userId !== userId || file.kind !== NOTE_FILE_KIND) {
+      throw new NotFoundException('Archivo no encontrado.');
+    }
+    return { filename: file.filename, mime: file.mime, bytes: file.bytes, data: file.data };
+  }
+
   private noteFilePath(fileId: ObjectId, hash: string): string {
     return `/media/notes/files/${fileId.toHexString()}?v=${hash.slice(0, 10)}`;
   }

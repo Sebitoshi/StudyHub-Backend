@@ -24,6 +24,7 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { CreateNoteDto } from './dto/create-note.dto';
 import { UpdateNoteDto } from './dto/update-note.dto';
 import { NoteAssistantDto } from './dto/note-assistant.dto';
+import { NotePdfDto } from './dto/note-pdf.dto';
 
 @ApiTags('Subjects')
 @ApiBearerAuth()
@@ -238,6 +239,19 @@ export class SubjectsController {
   ) {
     const subject = await this.subjectsService.findSubjectBrief(id, user.id);
     return this.notesAssistant.suggest({ ...dto, subjectName: subject.nombre });
+  }
+
+  @Post(':id/notes/assistant/pdf')
+  @ApiOperation({ summary: 'Generar un apunte completo a partir de un PDF adjunto' })
+  @ApiResponse({ status: 201, description: 'Propuesta generada (no se guarda automáticamente)' })
+  @ApiResponse({ status: 400, description: 'El PDF no existe, es de otro usuario o no tiene texto' })
+  async assistNoteFromPdf(
+    @CurrentUser() user: { id: number },
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: NotePdfDto,
+  ) {
+    const subject = await this.subjectsService.findSubjectBrief(id, user.id);
+    return this.notesAssistant.suggestFromPdf(user.id, { ...dto, subjectName: subject.nombre });
   }
 
   @Put(':id/notes/:noteId')
