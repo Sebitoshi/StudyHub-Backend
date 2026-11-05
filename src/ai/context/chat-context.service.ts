@@ -349,9 +349,13 @@ export class ChatContextService {
     message: string,
     options: ChatContextOptions,
   ): Promise<string> {
+    // Por id siempre (lo pidió la interfaz); por título solo cuando el mensaje
+    // pide expresamente mirar un apunte, para no cambiar el contexto habitual.
     const note = options.noteId
       ? await this.findNoteById(userId, options.noteId)
-      : await this.findNoteByTitle(userId, message);
+      : this.asksForNote(message)
+        ? await this.findNoteByTitle(userId, message)
+        : null;
 
     if (!note) return '';
 
@@ -471,6 +475,14 @@ export class ChatContextService {
     }
 
     return lines.length > 1 ? lines.join('\n') : '';
+  }
+
+  /** «Mira/revisa/lee mi apunte…»: indica que quiere que se lea un apunte. */
+  private asksForNote(message: string): boolean {
+    const text = normalize(message);
+    return /(apunte|mira|revisa|revisar|lee|leer|analiza|analizar|corrige|corregir|opinas|comenta)/.test(
+      text,
+    );
   }
 
   /** Solo se leen imágenes cuando el mensaje las menciona explícitamente. */
