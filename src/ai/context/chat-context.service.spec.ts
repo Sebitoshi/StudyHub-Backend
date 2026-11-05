@@ -3,6 +3,7 @@ import { ChatContextService } from './chat-context.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GeneratedResourcesService } from '../generated-resources/generated-resources.service';
 import { MediaService } from '../../media/media.service';
+import { DocumentTextService } from '../document-text.service';
 import { ImageAnalysisService } from '../image-analysis.service';
 import { normalizeChatDepth } from './chat-depth';
 
@@ -19,8 +20,10 @@ describe('ChatContextService', () => {
     listNoteImages: jest.Mock;
     listNoteFiles: jest.Mock;
     getNoteImage: jest.Mock;
+    getNoteFile: jest.Mock;
   };
   let imageAnalysis: { extractContent: jest.Mock };
+  let documents: { extractText: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -34,8 +37,10 @@ describe('ChatContextService', () => {
       listNoteImages: jest.fn().mockResolvedValue([]),
       listNoteFiles: jest.fn().mockResolvedValue([]),
       getNoteImage: jest.fn(),
+      getNoteFile: jest.fn(),
     };
     imageAnalysis = { extractContent: jest.fn() };
+    documents = { extractText: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -44,6 +49,7 @@ describe('ChatContextService', () => {
         { provide: GeneratedResourcesService, useValue: resources },
         { provide: MediaService, useValue: media },
         { provide: ImageAnalysisService, useValue: imageAnalysis },
+        { provide: DocumentTextService, useValue: documents },
       ],
     }).compile();
 
@@ -228,6 +234,39 @@ describe('ChatContextService', () => {
     expect(context).toContain('guia.pdf');
     expect(context).toContain('2 imagen(es) que NO se han leído');
     expect(imageAnalysis.extractContent).not.toHaveBeenCalled();
+  });
+
+  it('lee el texto de los PDFs del apunte solo cuando se lo piden', async () => {
+    prisma.note.findFirst.mockResolvedValue({
+      id: 12,
+      title: 'Límites laterales',
+      content: 'derivadas',
+      subject: { nombre: 'Cálculo' },
+    });
+    media.listNoteFiles.mockResolvedValue([{ id: 'f1', filename: 'guia.pdf' }]);
+    media.getNoteFile.mockResolvedValue({
+      data: Buffer.from('%PDF-1.7'),
+      bytes: 8,
+      filename: 'guia.pdf',
+    });
+    documents.extractText.mockResolvedValue(
+      'Teorema del sándwich y límites laterales con ejemplos. '.repeat(200),
+    );
+
+    const sinPedirlo = await service.build(1, 'auto', 'revisa mi apunte', undefined, { noteId: 12 });
+    expect(documents.extractText).not.toHaveBeenCalled();
+    expect(sinPedirlo).toContain('guia.pdf');
+    expect(sinPedirlo).toContain('No se ha leído el texto');
+
+    const pidiendolo = await service.build(1, 'auto', 'léeme el PDF de mi apunte', undefined, {
+      noteId: 12,
+    });
+    expect(documents.extractText).toHaveBeenCalledTimes(1);
+    expect(pidiendolo).toContain('Teorema del sándwich');
+    // Presupuesto acotado: no se manda el PDF entero al modelo.
+    expect(pidiendolo).toContain('Texto de los PDFs del apunte (recortado):');
+    expect(pidiendolo.split('Teorema del sándwich').length).toBeGreaterThan(1);
+    expect(pidiendolo.length).toBeLessThan(9000);
   });
 
   it('solo lee las imágenes del apunte cuando se piden explícitamente', async () => {

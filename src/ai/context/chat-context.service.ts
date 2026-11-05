@@ -5,6 +5,7 @@ import {
   SIMULACRO_TRIGGER,
 } from '../generated-resources/generated-resources.service';
 import { MediaService } from '../../media/media.service';
+import { DocumentTextService } from '../document-text.service';
 import { ImageAnalysisService } from '../image-analysis.service';
 import { ChatDepth } from './chat-depth';
 
@@ -17,6 +18,10 @@ const MAX_FULL_NOTE_CHARS = 6000;
 /** Tope de imágenes que se leen con visión: cada una cuesta tokens. */
 const MAX_NOTE_IMAGES_READ = 3;
 const MAX_NOTE_IMAGE_CHARS = 700;
+/** PDFs que se leen como mucho por apunte y presupuesto total de caracteres. */
+const MAX_PDFS_READ = 2;
+const MAX_PDF_CHARS = 3000;
+const MAX_PDF_TOTAL_CHARS = 5000;
 
 /** Opciones del apunte que el estudiante quiere que el profesor lea. */
 export interface ChatContextOptions {
@@ -24,6 +29,8 @@ export interface ChatContextOptions {
   noteId?: number;
   /** Leer sus imágenes con visión (solo cuando el estudiante lo pide). */
   includeImages?: boolean;
+  /** Leer el texto de sus PDFs (también solo cuando lo pide). */
+  includeFiles?: boolean;
 }
 
 const STOP_WORDS = new Set([
@@ -85,6 +92,7 @@ export class ChatContextService {
     private readonly resources: GeneratedResourcesService,
     private readonly media: MediaService,
     private readonly imageAnalysis: ImageAnalysisService,
+    private readonly documents: DocumentTextService,
   ) {}
 
   async build(
@@ -360,7 +368,8 @@ export class ChatContextService {
     if (!note) return '';
 
     const includeImages = options.includeImages || this.asksForImages(message);
-    return this.formatRequestedNote(userId, note, includeImages);
+    const includeFiles = options.includeFiles || this.asksForFiles(message);
+    return this.formatRequestedNote(userId, note, includeImages, includeFiles);
   }
 
   private async findNoteById(
@@ -412,6 +421,7 @@ export class ChatContextService {
     userId: number,
     note: RequestedNoteRow,
     includeImages: boolean,
+    includeFiles: boolean,
   ): Promise<string> {
     const subject = note.subject?.nombre ? `[${note.subject.nombre}] ` : '';
     const parts = [
@@ -426,7 +436,21 @@ export class ChatContextService {
     ]);
 
     if (files.length) {
-      parts.push(`PDFs adjuntos al apunte: ${files.map((file) => file.filename).join(', ')}.`);
+      const names = files.map((file) => file.filename).join(', ');
+      parts.push(`PDFs adjuntos al apunte: ${names}.`);
+
+      if (!includeFiles) {
+        parts.push(
+          'No se ha leído el texto de esos PDFs para no gastar tokens. Si el estudiante ' +
+            'pregunta por el documento, dile que puede pedir que lo leas.',
+        );
+      } else {
+        const extracted = await this.readFiles(userId, files);
+        parts.push(
+          extracted ||
+            'No se pudo leer texto de esos PDFs (pueden estar escaneados como imágenes).',
+        );
+      }
     }
 
     if (!images.length) return parts.join('\n');
@@ -475,6 +499,54 @@ export class ChatContextService {
     }
 
     return lines.length > 1 ? lines.join('\n') : '';
+  }
+
+  /**
+   * Texto de hasta dos PDFs del apunte, recortado a un presupuesto de caracteres:
+   * mandar el documento entero dispararía el costo y el contexto del chat.
+   */
+  private async readFiles(
+    userId: number,
+    files: Array<{ id: string; filename: string }>,
+  ): Promise<string> {
+    const lines: string[] = ['Texto de los PDFs del apunte (recortado):'];
+    let budget = MAX_PDF_TOTAL_CHARS;
+
+    for (const file of files.slice(0, MAX_PDFS_READ)) {
+      if (budget <= 0) break;
+
+      try {
+        const payload = await this.media.getNoteFile(file.id);
+        const doc = {
+          buffer: payload.data,
+          size: payload.bytes,
+          mimetype: 'application/pdf',
+          originalname: payload.filename,
+          fieldname: 'file',
+          encoding: '7bit',
+        } as unknown as Express.Multer.File;
+
+        const text = String((await this.documents.extractText(doc)) || '')
+          .replace(/[ \t]+/g, ' ')
+          .trim()
+          .slice(0, Math.min(MAX_PDF_CHARS, budget));
+        if (!text) continue;
+
+        budget -= text.length;
+        lines.push(`--- ${payload.filename} ---\n${text}`);
+      } catch (error) {
+        this.logger.warn(`No se pudo leer el PDF ${file.filename}: ${error}`);
+        lines.push(`--- ${file.filename} ---\nNo se pudo leer el PDF.`);
+      }
+    }
+
+    return lines.length > 1 ? lines.join('\n\n') : '';
+  }
+
+  /** Solo se lee el texto de los PDFs cuando el mensaje lo pide. */
+  private asksForFiles(message: string): boolean {
+    const text = normalize(message);
+    return /(pdf|documento|archivo|lectura|parcial|taller|guia)/.test(text);
   }
 
   /** «Mira/revisa/lee mi apunte…»: indica que quiere que se lea un apunte. */

@@ -48,6 +48,15 @@ export class ChatDto {
   @IsBoolean()
   includeImages?: boolean;
 
+  @ApiPropertyOptional({
+    description:
+      'Leer el texto de los PDFs del apunte (recortado a un presupuesto de caracteres). Solo se activa cuando el estudiante lo pide.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  includeFiles?: boolean;
+
   @ApiProperty({
     description: 'Mensaje del usuario para el asistente IA',
     example: 'Explícame la regla de la cadena con un ejemplo corto.',
