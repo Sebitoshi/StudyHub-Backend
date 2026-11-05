@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ChatContextService } from './chat-context.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GeneratedResourcesService } from '../generated-resources/generated-resources.service';
+import { MediaService } from '../../media/media.service';
+import { ImageAnalysisService } from '../image-analysis.service';
 import { normalizeChatDepth } from './chat-depth';
 
 describe('ChatContextService', () => {
@@ -10,24 +12,38 @@ describe('ChatContextService', () => {
     academicProfile: { findUnique: jest.Mock };
     roadmap: { findMany: jest.Mock };
     subject: { findMany: jest.Mock };
-    note: { findMany: jest.Mock };
+    note: { findMany: jest.Mock; findFirst: jest.Mock };
   };
   let resources: { listCompletedAssessments: jest.Mock };
+  let media: {
+    listNoteImages: jest.Mock;
+    listNoteFiles: jest.Mock;
+    getNoteImage: jest.Mock;
+  };
+  let imageAnalysis: { extractContent: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
       academicProfile: { findUnique: jest.fn().mockResolvedValue(null) },
       roadmap: { findMany: jest.fn().mockResolvedValue([]) },
       subject: { findMany: jest.fn().mockResolvedValue([]) },
-      note: { findMany: jest.fn().mockResolvedValue([]) },
+      note: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
     };
     resources = { listCompletedAssessments: jest.fn().mockResolvedValue([]) };
+    media = {
+      listNoteImages: jest.fn().mockResolvedValue([]),
+      listNoteFiles: jest.fn().mockResolvedValue([]),
+      getNoteImage: jest.fn(),
+    };
+    imageAnalysis = { extractContent: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChatContextService,
         { provide: PrismaService, useValue: prisma },
         { provide: GeneratedResourcesService, useValue: resources },
+        { provide: MediaService, useValue: media },
+        { provide: ImageAnalysisService, useValue: imageAnalysis },
       ],
     }).compile();
 
@@ -193,6 +209,51 @@ describe('ChatContextService', () => {
     expect(context).toContain('"Cinemática"');
     // Dos por materia como máximo: Integrales (la tercera de Cálculo) no entra.
     expect(context).not.toContain('"Integrales"');
+  });
+  it('lee completo el apunte pedido y no toca sus imágenes si no se piden', async () => {
+    prisma.note.findFirst.mockResolvedValue({
+      id: 12,
+      title: 'Límites laterales',
+      content: `inicio ${'x'.repeat(2000)} fin`,
+      subject: { nombre: 'Cálculo' },
+    });
+    media.listNoteFiles.mockResolvedValue([{ filename: 'guia.pdf' }]);
+    media.listNoteImages.mockResolvedValue([{ id: 'img1' }, { id: 'img2' }]);
+
+    const context = await service.build(1, 'auto', 'revisa mi apunte', undefined, { noteId: 12 });
+
+    expect(context).toContain('Límites laterales');
+    expect(context).toContain('inicio');
+    expect(context).toContain('fin');
+    expect(context).toContain('guia.pdf');
+    expect(context).toContain('2 imagen(es) que NO se han leído');
+    expect(imageAnalysis.extractContent).not.toHaveBeenCalled();
+  });
+
+  it('solo lee las imágenes del apunte cuando se piden explícitamente', async () => {
+    prisma.note.findFirst.mockResolvedValue({
+      id: 12,
+      title: 'Límites laterales',
+      content: 'derivadas',
+      subject: { nombre: 'Cálculo' },
+    });
+    media.listNoteImages.mockResolvedValue([{ id: 'img1' }]);
+    media.getNoteImage.mockResolvedValue({
+      data: Buffer.from('x'),
+      mime: 'image/png',
+      bytes: 1,
+    });
+    imageAnalysis.extractContent.mockResolvedValue({
+      contenido: { contenidoPrincipal: 'Gráfica con asíntota vertical', textoDetectado: '' },
+    });
+
+    const context = await service.build(1, 'max', 'mira mi apunte con imágenes', undefined, {
+      noteId: 12,
+      includeImages: true,
+    });
+
+    expect(imageAnalysis.extractContent).toHaveBeenCalledTimes(1);
+    expect(context).toContain('Gráfica con asíntota vertical');
   });
 });
 

@@ -223,12 +223,15 @@ export class SubjectsService {
 
   async createNote(subjectId: number, userId: number, dto: CreateNoteDto) {
     await this.findSubjectOrThrow(subjectId, userId);
-    const { imageIds, ...data } = dto;
+    const { imageIds, fileIds, ...data } = dto;
     const note = await this.prisma.note.create({
       data: { ...data, subjectId },
     });
     if (imageIds?.length) {
       await this.media.attachImagesToNote(userId, note.id, imageIds);
+    }
+    if (fileIds?.length) {
+      await this.media.attachFilesToNote(userId, note.id, fileIds);
     }
     await this.gamification.addXp(userId, 10, XpActionType.CREATE_NOTE);
     const [withImages] = await this.withNoteImages(userId, [note]);
@@ -256,7 +259,7 @@ export class SubjectsService {
     });
     if (!note) throw new NotFoundException('Nota no encontrada');
 
-    const { imageIds, ...data } = dto;
+    const { imageIds, fileIds, ...data } = dto;
     const updated = await this.prisma.note.update({
       where: { id: noteId },
       data,
@@ -264,34 +267,52 @@ export class SubjectsService {
     if (imageIds?.length) {
       await this.media.attachImagesToNote(userId, updated.id, imageIds);
     }
+    if (fileIds?.length) {
+      await this.media.attachFilesToNote(userId, updated.id, fileIds);
+    }
 
     const [withImages] = await this.withNoteImages(userId, [updated]);
     return withImages;
   }
 
   /**
-   * Adjunta a cada apunte sus imágenes (url, dimensiones) para que el frontend
-   * pueda mostrarlas, agrandarlas y abrirlas a pantalla completa.
+   * Adjunta a cada apunte sus imágenes (url, dimensiones) y sus PDFs para que el
+   * frontend pueda mostrarlos, agrandarlos y abrirlos.
    */
   private async withNoteImages<T extends { id: number }>(userId: number, notes: T[]) {
-    if (!notes.length) return notes.map((note) => ({ ...note, images: [] }));
+    if (!notes.length) return notes.map((note) => ({ ...note, images: [], files: [] }));
 
-    const images = await this.media
-      .listNoteImages(userId, notes.map((note) => note.id))
-      .catch((error) => {
+    const ids = notes.map((note) => note.id);
+    const [images, files] = await Promise.all([
+      this.media.listNoteImages(userId, ids).catch((error) => {
         this.logger.warn(`No se pudieron leer las imágenes de los apuntes: ${error}`);
         return [];
-      });
+      }),
+      this.media.listNoteFiles(userId, ids).catch((error) => {
+        this.logger.warn(`No se pudieron leer los PDFs de los apuntes: ${error}`);
+        return [];
+      }),
+    ]);
 
-    const byNote = new Map<number, typeof images>();
-    for (const image of images) {
-      if (image.noteId == null) continue;
-      const list = byNote.get(image.noteId) ?? [];
-      list.push(image);
-      byNote.set(image.noteId, list);
-    }
+    const groupByNote = <T extends { noteId: number | null }>(rows: T[]) => {
+      const map = new Map<number, T[]>();
+      for (const row of rows) {
+        if (row.noteId == null) continue;
+        const list = map.get(row.noteId) ?? [];
+        list.push(row);
+        map.set(row.noteId, list);
+      }
+      return map;
+    };
 
-    return notes.map((note) => ({ ...note, images: byNote.get(note.id) ?? [] }));
+    const imagesByNote = groupByNote(images);
+    const filesByNote = groupByNote(files);
+
+    return notes.map((note) => ({
+      ...note,
+      images: imagesByNote.get(note.id) ?? [],
+      files: filesByNote.get(note.id) ?? [],
+    }));
   }
 
   async togglePinNote(noteId: number, subjectId: number, userId: number) {

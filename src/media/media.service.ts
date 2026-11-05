@@ -16,9 +16,14 @@ import {
   MAX_IMAGE_BYTES,
   MAX_IMAGE_CHUNKS,
   MAX_IMAGE_DIMENSION,
+  MAX_NOTE_FILE_BYTES,
+  MAX_NOTE_FILE_CHUNKS,
+  MAX_NOTE_FILES_PER_NOTE,
   MAX_NOTE_IMAGES_PER_NOTE,
+  NOTE_FILE_KIND,
+  NOTE_FILE_MIME,
   NOTE_KIND,
-  SUPPORTED_IMAGE_KINDS,
+  SUPPORTED_UPLOAD_KINDS,
 } from './media.constants';
 import { MediaRepository, type NoteImageRow } from './media.repository';
 import {
@@ -60,6 +65,17 @@ export interface AvatarPayload {
   mime: string;
   bytes: number;
   hash: string;
+}
+
+export interface NoteFilePayload {
+  id: string;
+  /** Ruta de la API para abrir el PDF: `/media/notes/files/<id>?v=<hash>`. */
+  url: string;
+  filename: string;
+  mime: string;
+  bytes: number;
+  subjectId: number | null;
+  noteId: number | null;
 }
 
 export interface NoteImagePayload {
@@ -105,8 +121,8 @@ export class MediaService {
     }
 
     const kind = String(input.kind || AVATAR_KIND).trim().toLowerCase();
-    if (!SUPPORTED_IMAGE_KINDS.has(kind)) {
-      throw new BadRequestException('Tipo de imagen no soportado.');
+    if (!SUPPORTED_UPLOAD_KINDS.has(kind)) {
+      throw new BadRequestException('Tipo de archivo no soportado.');
     }
 
     const index = Number(input.index);
@@ -114,7 +130,8 @@ export class MediaService {
     if (!Number.isInteger(index) || index < 0) {
       throw new BadRequestException('El índice del trozo no es válido.');
     }
-    if (!Number.isInteger(total) || total < 1 || total > MAX_IMAGE_CHUNKS) {
+    const maxChunks = kind === NOTE_FILE_KIND ? MAX_NOTE_FILE_CHUNKS : MAX_IMAGE_CHUNKS;
+    if (!Number.isInteger(total) || total < 1 || total > maxChunks) {
       throw new BadRequestException('El número de trozos no es válido.');
     }
 
@@ -361,15 +378,20 @@ export class MediaService {
     return { ok: true };
   }
 
-  /** Postgres borra la nota con CASCADE, así que las imágenes se limpian aquí. */
+  /**
+   * Postgres borra la nota con CASCADE, así que las imágenes y los PDFs se
+   * limpian aquí (Mongo no participa en las cascadas de Postgres).
+   */
   async deleteImagesForNote(userId: number, noteId: number): Promise<void> {
     const deleted = await this.repo.deleteImagesForNote(userId, noteId);
-    if (deleted) this.avatarCache.clear();
+    const files = await this.repo.deleteFilesForNote(userId, noteId).catch(() => 0);
+    if (deleted || files) this.avatarCache.clear();
   }
 
   async deleteImagesForSubject(userId: number, subjectId: number): Promise<void> {
     const deleted = await this.repo.deleteImagesForSubject(userId, subjectId);
-    if (deleted) this.avatarCache.clear();
+    const files = await this.repo.deleteFilesForSubject(userId, subjectId).catch(() => 0);
+    if (deleted || files) this.avatarCache.clear();
   }
 
   async cancel(userId: number, uploadId: string): Promise<{ ok: boolean }> {
@@ -453,6 +475,209 @@ export class MediaService {
 
   private noteImagePath(imageId: ObjectId, hash: string): string {
     return `/media/notes/${imageId.toHexString()}?v=${hash.slice(0, 10)}`;
+  }
+
+  // ── PDFs de apuntes ────────────────────────────────────────
+
+  /**
+   * Guarda un PDF para un apunte. Igual que con las imágenes, `noteId` puede
+   * faltar si el apunte aún no existe: se liga al guardar la nota con `fileIds`.
+   */
+  async completeNoteFile(
+    userId: number,
+    uploadId: string,
+    options: { subjectId: number; noteId?: number | null; filename?: string },
+  ): Promise<NoteFilePayload> {
+    const session = await this.repo.getSession(uploadId);
+    if (!session) {
+      throw new NotFoundException('La subida no existe o ya se procesó.');
+    }
+    if (session.userId !== userId) {
+      throw new ForbiddenException('No tienes acceso a esta subida.');
+    }
+
+    const subject = await this.prisma.subject.findFirst({
+      where: { id: options.subjectId, userId },
+      select: { id: true },
+    });
+    if (!subject) {
+      throw new NotFoundException('Materia no encontrada.');
+    }
+
+    let noteId: number | null = null;
+    if (options.noteId != null) {
+      const note = await this.prisma.note.findFirst({
+        where: { id: options.noteId, subjectId: options.subjectId },
+        select: { id: true },
+      });
+      if (!note) {
+        throw new NotFoundException('Nota no encontrada.');
+      }
+      const stored = await this.repo.countNoteFiles(note.id);
+      if (stored >= MAX_NOTE_FILES_PER_NOTE) {
+        throw new BadRequestException(
+          `Un apunte admite como máximo ${MAX_NOTE_FILES_PER_NOTE} PDFs.`,
+        );
+      }
+      noteId = note.id;
+    }
+
+    try {
+      const { buffer, hash } = await this.assembleNoteFile(session, uploadId);
+      const fileId = new ObjectId();
+      const filename = this.safeFilename(options.filename);
+
+      await this.repo.insertNoteFile({
+        _id: fileId,
+        userId,
+        kind: NOTE_FILE_KIND,
+        subjectId: options.subjectId,
+        noteId,
+        mime: NOTE_FILE_MIME,
+        filename,
+        bytes: buffer.length,
+        hash,
+        data: buffer,
+        createdAt: new Date(),
+      });
+
+      return {
+        id: fileId.toHexString(),
+        url: this.noteFilePath(fileId, hash),
+        filename,
+        mime: NOTE_FILE_MIME,
+        bytes: buffer.length,
+        subjectId: options.subjectId,
+        noteId,
+      };
+    } finally {
+      await this.repo.deleteUpload(uploadId).catch((error) => {
+        this.logger.warn(`No se pudo limpiar la subida ${uploadId}: ${error}`);
+      });
+    }
+  }
+
+  /** PDFs de varios apuntes sin los bytes: solo metadatos y URL de la API. */
+  async listNoteFiles(userId: number, noteIds: number[]): Promise<NoteFilePayload[]> {
+    if (!noteIds.length) return [];
+    const rows = await this.repo.listNoteFiles(userId, noteIds);
+    return rows.map((row) => ({
+      id: row._id,
+      url: this.noteFilePath(new ObjectId(row._id), row.hash),
+      filename: row.filename,
+      mime: row.mime,
+      bytes: row.bytes,
+      subjectId: row.subjectId,
+      noteId: row.noteId,
+    }));
+  }
+
+  /** Liga al apunte PDFs subidos antes de guardarlo (mismo dueño y materia). */
+  async attachFilesToNote(userId: number, noteId: number, fileIds: string[]): Promise<number> {
+    const ids = (fileIds || [])
+      .filter((id) => ObjectId.isValid(id))
+      .map((id) => new ObjectId(id));
+    if (!ids.length) return 0;
+
+    const note = await this.prisma.note.findUnique({
+      where: { id: noteId },
+      select: { id: true, subjectId: true },
+    });
+    if (!note) {
+      throw new NotFoundException('Nota no encontrada.');
+    }
+
+    const stored = await this.repo.countNoteFiles(note.id);
+    if (stored + ids.length > MAX_NOTE_FILES_PER_NOTE) {
+      throw new BadRequestException(
+        `Un apunte admite como máximo ${MAX_NOTE_FILES_PER_NOTE} PDFs.`,
+      );
+    }
+
+    return this.repo.attachFilesToNote(userId, ids, note.id, note.subjectId);
+  }
+
+  async deleteNoteFile(userId: number, fileId: string): Promise<{ ok: boolean }> {
+    if (!ObjectId.isValid(fileId)) {
+      throw new NotFoundException('Archivo no encontrado.');
+    }
+    const deleted = await this.repo.deleteNoteFile(userId, new ObjectId(fileId));
+    if (!deleted) {
+      throw new NotFoundException('Archivo no encontrado.');
+    }
+    return { ok: true };
+  }
+
+  /** Bytes del PDF para servirlo desde la API. */
+  async getNoteFile(
+    fileId: string,
+  ): Promise<NoteFilePayload & { data: Buffer; hash: string }> {
+    if (!ObjectId.isValid(fileId)) {
+      throw new NotFoundException('Archivo no encontrado.');
+    }
+    const file = await this.repo.getNoteFileById(new ObjectId(fileId));
+    if (!file) {
+      throw new NotFoundException('Archivo no encontrado.');
+    }
+    return {
+      id: fileId,
+      url: this.noteFilePath(new ObjectId(fileId), file.hash),
+      filename: file.filename,
+      mime: file.mime,
+      bytes: file.bytes,
+      subjectId: file.subjectId ?? null,
+      noteId: file.noteId ?? null,
+      data: file.data,
+      hash: file.hash,
+    };
+  }
+
+  private noteFilePath(fileId: ObjectId, hash: string): string {
+    return `/media/notes/files/${fileId.toHexString()}?v=${hash.slice(0, 10)}`;
+  }
+
+  private safeFilename(value?: string): string {
+    const base = String(value || '')
+      .split(/[\\/]/)
+      .pop()
+      ?.replace(/[^\w.\- ()áéíóúÁÉÍÓÚñÑ]/g, '')
+      .trim();
+    const name = base && base.length > 3 ? base.slice(0, 120) : 'documento.pdf';
+    return name.toLowerCase().endsWith('.pdf') ? name : `${name}.pdf`;
+  }
+
+  /** Une los trozos de un PDF y comprueba la firma del archivo. */
+  private async assembleNoteFile(
+    session: { _id: string; total: number; kind?: string },
+    uploadId: string,
+  ): Promise<{ buffer: Buffer; hash: string }> {
+    if (session.kind && session.kind !== NOTE_FILE_KIND) {
+      throw new BadRequestException('Esta subida pertenece a otro tipo de archivo.');
+    }
+
+    const chunks = await this.repo.listChunks(uploadId);
+    const indices = new Set(chunks.map((chunk) => chunk.index));
+    if (chunks.length < session.total || indices.size !== session.total) {
+      throw new BadRequestException('La subida está incompleta. Vuelve a intentarlo.');
+    }
+
+    const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.data.length, 0);
+    if (totalBytes === 0) {
+      throw new BadRequestException('El archivo llegó vacío.');
+    }
+    if (totalBytes > MAX_NOTE_FILE_BYTES) {
+      throw new PayloadTooLargeException(
+        `El PDF supera el máximo de ${Math.round(MAX_NOTE_FILE_BYTES / (1024 * 1024))} MB.`,
+      );
+    }
+
+    const buffer = Buffer.concat(chunks.map((chunk) => chunk.data));
+    // Todo PDF empieza por "%PDF-": así no se guarda cualquier archivo renombrado.
+    if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
+      throw new UnsupportedMediaTypeException('El archivo no es un PDF válido.');
+    }
+
+    return { buffer, hash: hashBytes(buffer) };
   }
 
   /**

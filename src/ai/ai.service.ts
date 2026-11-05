@@ -4,7 +4,7 @@ import { CONVERSATIONS_COLLECTION, MESSAGES_COLLECTION } from './mongo.provider'
 import { AiProviderService } from './ai-provider.service';
 import { PromptBuilderService } from './context/prompt-builder.service';
 import { AcademicContextService } from './context/academic-context.service';
-import { ChatContextService } from './context/chat-context.service';
+import { ChatContextService, type ChatContextOptions } from './context/chat-context.service';
 import { ChatDepth, normalizeChatDepth } from './context/chat-depth';
 import { TeacherProfileService } from './teacher-profiles/teacher-profile.service';
 import { MemoryService } from './memory/memory.service';
@@ -244,6 +244,7 @@ export class AiService {
     message: string,
     teacherId?: string,
     depth?: string,
+    contextOptions?: ChatContextOptions,
   ) {
     const chatDepth = normalizeChatDepth(depth);
     const conv = await this.ensureConversation(userId, conversationId);
@@ -259,6 +260,7 @@ export class AiService {
       sessionStartedAt,
       chatDepth,
       teacherId,
+      contextOptions,
     );
     const messagesForModel = await this.buildModelPrompt(prep, message);
 
@@ -570,6 +572,7 @@ export class AiService {
     sessionStartedAt: Date,
     depth: ChatDepth,
     teacherId?: string,
+    contextOptions?: ChatContextOptions,
   ) {
     const promptTemplate = this.promptTemplateService.detectIntent(message);
 
@@ -632,7 +635,13 @@ export class AiService {
     await this.learningAnalyticsService.recordQuestion(userId, detectedSubject);
 
     // Contexto compacto según el modo (perfil + progreso + apuntes).
-    const contextText = await this.chatContext.build(userId, depth, message, teacherProfile);
+    const contextText = await this.chatContext.build(
+      userId,
+      depth,
+      message,
+      teacherProfile,
+      contextOptions,
+    );
 
     const memories: any = await this.memoryService.getRelevantMemories(userId, message, 10);
 

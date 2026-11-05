@@ -14,8 +14,17 @@ export const STALE_IMAGE_UPLOAD_MS = 30 * 60 * 1000;
 export const AVATAR_KIND = 'avatar';
 /** Imágenes incrustadas en los apuntes. */
 export const NOTE_KIND = 'note';
+/** PDFs adjuntos a los apuntes. */
+export const NOTE_FILE_KIND = 'note-file';
 
 export const SUPPORTED_IMAGE_KINDS = new Set([AVATAR_KIND, NOTE_KIND]);
+export const SUPPORTED_UPLOAD_KINDS = new Set([AVATAR_KIND, NOTE_KIND, NOTE_FILE_KIND]);
 
 /** Tope de imágenes por apunte: evita apuntes inmanejables en móvil. */
 export const MAX_NOTE_IMAGES_PER_NOTE = 20;
+
+/** PDFs: hasta 12 MB repartidos en trozos de 512 KB y 5 documentos por apunte. */
+export const MAX_NOTE_FILE_BYTES = 12 * 1024 * 1024;
+export const MAX_NOTE_FILE_CHUNKS = Math.ceil(MAX_NOTE_FILE_BYTES / IMAGE_CHUNK_BYTES);
+export const MAX_NOTE_FILES_PER_NOTE = 5;
+export const NOTE_FILE_MIME = 'application/pdf';

@@ -13,6 +13,39 @@ import { MediaService } from './media.service';
 export class NoteImagesController {
   constructor(private readonly media: MediaService) {}
 
+  @Get('files/:id')
+  @ApiOperation({ summary: 'Obtener un PDF de apunte (cacheable por versión)' })
+  @ApiParam({ name: 'id', description: 'Id del PDF en MongoDB' })
+  @ApiQuery({ name: 'v', required: false, description: 'Versión (hash) para caché inmutable' })
+  async getFile(
+    @Param('id') id: string,
+    @Query('v') version: string | undefined,
+    @Req() req: any,
+    @Res() res: Response,
+  ) {
+    const file = await this.media.getNoteFile(id);
+
+    const etag = `"${file.hash}"`;
+    const ifNoneMatch = String(req.headers['if-none-match'] || '');
+    if (ifNoneMatch && (ifNoneMatch.includes(etag) || ifNoneMatch.includes('*'))) {
+      res.status(304).end();
+      return;
+    }
+
+    const isCurrentVersion = version === file.hash.slice(0, 10);
+    res.setHeader('Content-Type', file.mime);
+    res.setHeader('Content-Length', file.bytes);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.filename)}"`);
+    res.setHeader('ETag', etag);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader(
+      'Cache-Control',
+      isCurrentVersion ? 'private, max-age=31536000, immutable' : 'private, max-age=300',
+    );
+
+    res.end(file.data);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Obtener la imagen de un apunte (cacheable por versión)' })
   @ApiParam({ name: 'id', description: 'Id de la imagen en MongoDB' })

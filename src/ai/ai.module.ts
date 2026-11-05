@@ -39,6 +39,7 @@ import { NotesAssistantService } from './notes/notes-assistant.service';
 import { ImageAnalysisService } from './image-analysis.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { BillingModule } from '../billing/billing.module';
+import { MediaModule } from '../media/media.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { BillingModule } from '../billing/billing.module';
     PromptTemplateModule,
     KnowledgeGapsModule,
     BillingModule,
+    MediaModule,
   ],
   controllers: [AiController],
   providers: [

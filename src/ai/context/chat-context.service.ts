@@ -4,12 +4,27 @@ import {
   GeneratedResourcesService,
   SIMULACRO_TRIGGER,
 } from '../generated-resources/generated-resources.service';
+import { MediaService } from '../../media/media.service';
+import { ImageAnalysisService } from '../image-analysis.service';
 import { ChatDepth } from './chat-depth';
 
 const MAX_NOTES_MAX = 8;
 const MAX_NOTES_MAXPRO = 8;
 const MAX_NOTE_CHARS = 360;
 const MAX_PROGRESS_ROWS = 8;
+/** Un apunte pedido explícitamente se entrega completo (no recortado a 360). */
+const MAX_FULL_NOTE_CHARS = 6000;
+/** Tope de imágenes que se leen con visión: cada una cuesta tokens. */
+const MAX_NOTE_IMAGES_READ = 3;
+const MAX_NOTE_IMAGE_CHARS = 700;
+
+/** Opciones del apunte que el estudiante quiere que el profesor lea. */
+export interface ChatContextOptions {
+  /** Id del apunte seleccionado en la interfaz. */
+  noteId?: number;
+  /** Leer sus imágenes con visión (solo cuando el estudiante lo pide). */
+  includeImages?: boolean;
+}
 
 const STOP_WORDS = new Set([
   'para', 'como', 'sobre', 'este', 'esta', 'esto', 'estos', 'estas',
@@ -21,6 +36,13 @@ const STOP_WORDS = new Set([
 interface TeacherLike {
   name?: string | null;
   subjects?: string[] | null;
+}
+
+interface RequestedNoteRow {
+  id: number;
+  title: string;
+  content: string;
+  subject?: { nombre?: string | null } | null;
 }
 
 interface NoteRow {
@@ -61,6 +83,8 @@ export class ChatContextService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly resources: GeneratedResourcesService,
+    private readonly media: MediaService,
+    private readonly imageAnalysis: ImageAnalysisService,
   ) {}
 
   async build(
@@ -68,8 +92,9 @@ export class ChatContextService {
     depth: ChatDepth,
     message: string,
     teacher?: TeacherLike | null,
+    options: ChatContextOptions = {},
   ): Promise<string> {
-    if (depth === 'low') return '';
+    if (depth === 'low' && !options.noteId) return '';
 
     try {
       const [profile, progress, roadmaps] = await Promise.all([
@@ -84,7 +109,13 @@ export class ChatContextService {
       if (progress) sections.push(progress);
       if (roadmaps) sections.push(roadmaps);
 
-      if (depth === 'max' || depth === 'auto') {
+      // Si el estudiante pide un apunte concreto se envía completo y se omiten
+      // los apuntes genéricos: gasta menos tokens y responde sobre lo que pidió.
+      const requested = await this.loadRequestedNote(userId, message, options);
+
+      if (requested) {
+        sections.push(requested);
+      } else if (depth === 'max' || depth === 'auto') {
         const notes = await this.loadNotesForTeacher(userId, teacher);
         if (notes) sections.push(notes);
       } else if (depth === 'maxpro') {
@@ -304,6 +335,153 @@ export class ChatContextService {
       'cualquier materia',
       true,
     );
+  }
+
+  // ── Apunte pedido por el estudiante ────────────────────────
+
+  /**
+   * Apunte que el estudiante quiere que el profesor revise: por id (lo elige la
+   * interfaz) o porque el mensaje nombra su título. El texto va completo; las
+   * imágenes solo se leen si lo pide (ver `asksForImages`).
+   */
+  private async loadRequestedNote(
+    userId: number,
+    message: string,
+    options: ChatContextOptions,
+  ): Promise<string> {
+    const note = options.noteId
+      ? await this.findNoteById(userId, options.noteId)
+      : await this.findNoteByTitle(userId, message);
+
+    if (!note) return '';
+
+    const includeImages = options.includeImages || this.asksForImages(message);
+    return this.formatRequestedNote(userId, note, includeImages);
+  }
+
+  private async findNoteById(
+    userId: number,
+    noteId: number,
+  ): Promise<RequestedNoteRow | null> {
+    return this.prisma.note.findFirst({
+      where: { id: noteId, subject: { userId } },
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        subject: { select: { nombre: true } },
+      },
+    });
+  }
+
+  /** Título contenido en el mensaje: «mira mi apunte de límites por la derecha». */
+  private async findNoteByTitle(
+    userId: number,
+    message: string,
+  ): Promise<RequestedNoteRow | null> {
+    const text = normalize(message);
+    if (text.length < 8) return null;
+
+    const notes = await this.prisma.note.findMany({
+      where: { subject: { userId } },
+      orderBy: { updatedAt: 'desc' },
+      take: 60,
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        subject: { select: { nombre: true } },
+      },
+    });
+
+    let best: { note: RequestedNoteRow; length: number } | null = null;
+    for (const note of notes) {
+      const title = normalize(note.title).trim();
+      if (title.length < 4 || !text.includes(title)) continue;
+      if (!best || title.length > best.length) best = { note, length: title.length };
+    }
+
+    return best?.note ?? null;
+  }
+
+  private async formatRequestedNote(
+    userId: number,
+    note: RequestedNoteRow,
+    includeImages: boolean,
+  ): Promise<string> {
+    const subject = note.subject?.nombre ? `[${note.subject.nombre}] ` : '';
+    const parts = [
+      `Apunte que el estudiante quiere que revises: ${subject}"${note.title}"`,
+      'Contenido completo del apunte:',
+      this.truncateLong(note.content, MAX_FULL_NOTE_CHARS),
+    ];
+
+    const [files, images] = await Promise.all([
+      this.media.listNoteFiles(userId, [note.id]).catch(() => []),
+      this.media.listNoteImages(userId, [note.id]).catch(() => []),
+    ]);
+
+    if (files.length) {
+      parts.push(`PDFs adjuntos al apunte: ${files.map((file) => file.filename).join(', ')}.`);
+    }
+
+    if (!images.length) return parts.join('\n');
+
+    if (!includeImages) {
+      parts.push(
+        `El apunte tiene ${images.length} imagen(es) que NO se han leído para no gastar tokens. ` +
+          'Si el estudiante pregunta por ellas, dile que puede pedir que las incluyas.',
+      );
+      return parts.join('\n');
+    }
+
+    const descriptions = await this.readImages(images.slice(0, MAX_NOTE_IMAGES_READ));
+    if (descriptions) parts.push(descriptions);
+    return parts.join('\n');
+  }
+
+  /** Lee las imágenes del apunte con el mismo modelo de visión del análisis. */
+  private async readImages(images: Array<{ id: string }>): Promise<string> {
+    const lines: string[] = ['Imágenes del apunte (leídas con visión):'];
+
+    for (let index = 0; index < images.length; index += 1) {
+      try {
+        const payload = await this.media.getNoteImage(images[index].id);
+        const file = {
+          buffer: payload.data,
+          size: payload.bytes,
+          mimetype: payload.mime,
+          originalname: `imagen-${index + 1}`,
+          fieldname: 'image',
+          encoding: '7bit',
+        } as unknown as Express.Multer.File;
+
+        const { contenido } = await this.imageAnalysis.extractContent(file, {
+          enfoque: 'apunte del estudiante',
+        });
+        const body = [contenido.contenidoPrincipal, contenido.textoDetectado]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+        lines.push(`- Imagen ${index + 1}: ${this.truncateLong(body, MAX_NOTE_IMAGE_CHARS)}`);
+      } catch (error) {
+        this.logger.warn(`No se pudo leer una imagen del apunte: ${error}`);
+        lines.push(`- Imagen ${index + 1}: no se pudo leer.`);
+      }
+    }
+
+    return lines.length > 1 ? lines.join('\n') : '';
+  }
+
+  /** Solo se leen imágenes cuando el mensaje las menciona explícitamente. */
+  private asksForImages(message: string): boolean {
+    const text = normalize(message);
+    return /(imagen|imagenes|foto|fotos|captura|diagrama|grafic|figura|esquema)/.test(text);
+  }
+
+  private truncateLong(value: string, max: number): string {
+    const text = String(value || '').trim();
+    return text.length > max ? `${text.slice(0, max).trim()}…` : text;
   }
 
   private formatNotes(

@@ -74,6 +74,7 @@ export class AiController {
       dto.message,
       dto.teacherId,
       dto.depth,
+      { noteId: dto.noteId, includeImages: dto.includeImages },
     );
     await this.trackUsage(userId, { depth: dto.depth });
     return res;

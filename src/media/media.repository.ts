@@ -58,6 +58,32 @@ export interface NoteImageRow {
   createdAt: Date;
 }
 
+/** Metadatos de un PDF de apunte: sin los bytes, para listar rápido. */
+export interface NoteFileRow {
+  _id: string;
+  subjectId: number | null;
+  noteId: number | null;
+  mime: string;
+  filename: string;
+  bytes: number;
+  hash: string;
+  createdAt: Date;
+}
+
+export interface StoredNoteFile {
+  _id: ObjectId;
+  userId: number;
+  kind: string;
+  subjectId?: number | null;
+  noteId?: number | null;
+  mime: string;
+  filename: string;
+  bytes: number;
+  hash: string;
+  data: Buffer;
+  createdAt: Date;
+}
+
 /** El driver devuelve BSON Binary; lo normalizamos siempre a Buffer. */
 export function asBuffer(value: any): Buffer {
   if (Buffer.isBuffer(value)) return value;
@@ -216,6 +242,70 @@ export class MediaRepository {
 
   async deleteImagesForSubject(userId: number, subjectId: number): Promise<number> {
     const result = await this.images.deleteMany({ userId, kind: 'note', subjectId });
+    return result.deletedCount ?? 0;
+  }
+
+  // ── PDFs de apuntes ────────────────────────────────────────
+
+  async insertNoteFile(file: StoredNoteFile): Promise<void> {
+    await this.images.insertOne(file);
+  }
+
+  async getNoteFileById(
+    id: ObjectId,
+  ): Promise<Omit<StoredNoteFile, '_id'> & { _id: ObjectId } | null> {
+    const file = await this.images.findOne({ _id: id, kind: 'note-file' });
+    return file ? { ...file, data: asBuffer(file.data) } : null;
+  }
+
+  async listNoteFiles(userId: number, noteIds: number[]): Promise<NoteFileRow[]> {
+    const rows = await this.images
+      .find({ userId, kind: 'note-file', noteId: { $in: noteIds } })
+      .project({ data: 0 })
+      .sort({ createdAt: 1 })
+      .toArray();
+    return rows.map((row: any) => ({
+      _id: String(row._id),
+      subjectId: row.subjectId ?? null,
+      noteId: row.noteId ?? null,
+      mime: row.mime,
+      filename: row.filename || 'documento.pdf',
+      bytes: row.bytes,
+      hash: row.hash,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async countNoteFiles(noteId: number): Promise<number> {
+    return this.images.countDocuments({ kind: 'note-file', noteId });
+  }
+
+  /** Liga PDFs subidos antes de guardar el apunte; nunca toca archivos ajenos. */
+  async attachFilesToNote(
+    userId: number,
+    ids: ObjectId[],
+    noteId: number,
+    subjectId: number,
+  ): Promise<number> {
+    const result = await this.images.updateMany(
+      { _id: { $in: ids }, userId, kind: 'note-file', subjectId },
+      { $set: { noteId } },
+    );
+    return result.modifiedCount ?? 0;
+  }
+
+  async deleteNoteFile(userId: number, id: ObjectId): Promise<boolean> {
+    const result = await this.images.deleteOne({ _id: id, userId, kind: 'note-file' });
+    return (result.deletedCount ?? 0) > 0;
+  }
+
+  async deleteFilesForNote(userId: number, noteId: number): Promise<number> {
+    const result = await this.images.deleteMany({ userId, kind: 'note-file', noteId });
+    return result.deletedCount ?? 0;
+  }
+
+  async deleteFilesForSubject(userId: number, subjectId: number): Promise<number> {
+    const result = await this.images.deleteMany({ userId, kind: 'note-file', subjectId });
     return result.deletedCount ?? 0;
   }
 }

@@ -24,4 +24,14 @@ export class CreateNoteDto {
   @IsArray()
   @IsString({ each: true })
   imageIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Ids de PDFs ya subidos (POST /media/notes/files/:uploadId/complete) para ligarlos al apunte',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fileIds?: string[];
 }
