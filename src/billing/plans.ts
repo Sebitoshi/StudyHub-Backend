@@ -6,7 +6,7 @@
  * suscripción guarda el `planCode` con el que se contrató.
  *
  * Vista de la cuenta gratis:
- *   - Chat IA: 50 mensajes / día (1 crédito por mensaje).
+ *   - Chat IA: 80 mensajes / día (1 crédito por mensaje).
  *   - Créditos para imágenes, PDF y análisis: 25 usos / día (1 crédito por uso).
  * Premium: chat ilimitado e imágenes/PDF/análisis ilimitados.
  */
@@ -45,14 +45,14 @@ export function getFreePlan(): BillingPlanDefinition {
     code: FREE_PLAN_CODE,
     name: 'Gratis',
     description:
-      '50 mensajes de chat al día más 25 créditos diarios para imágenes, PDF y análisis.',
+      '80 mensajes de chat al día más 25 créditos diarios para recursos con IA.',
     priceCop: 0,
     currency: BILLING_CURRENCY,
-    chatDailyCredits: readIntEnv('AI_FREE_DAILY_CREDITS', 50),
+    chatDailyCredits: readIntEnv('AI_FREE_DAILY_CREDITS', 80),
     premiumDailyUses: readIntEnv('AI_FREE_PREMIUM_USES', 25),
     features: [
-      '50 mensajes de chat al día',
-      '25 créditos diarios para imágenes y PDF',
+      '80 mensajes de chat al día',
+      '25 créditos diarios para quizzes, simulacros, imágenes y PDF',
       'Contexto académico y progreso',
       'Apuntes y metas de aprendizaje',
     ],
