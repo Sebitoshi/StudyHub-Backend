@@ -917,8 +917,8 @@ export class AiService {
       const freshConv = await this.conversations.findOne({ _id: conv._id });
       if (freshConv && !freshConv.title) {
         const titlePrompt = [
-          { role: 'system', content: 'You are a concise title generator.' },
-          { role: 'user', content: `Generate a short, descriptive title (3-6 words) for this conversation: "${message}"` },
+          { role: 'system', content: 'Eres un generador de títulos breve. Escribe siempre en español. Devuelve solo el título, sin comillas, asteriscos ni formato Markdown.' },
+          { role: 'user', content: `Escribe un título claro de 3 a 6 palabras para esta conversación: "${message}"` },
         ];
         const titleResp = await this.ai.chat(titlePrompt);
         const title = (titleResp?.content || '').trim().slice(0, 120);
