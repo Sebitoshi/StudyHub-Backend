@@ -1,14 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { KnowledgeGapsService } from '../ai/knowledge-gaps/knowledge-gaps.service';
 import { LearningAnalyticsService } from '../ai/learning-analytics/learning-analytics.service';
 
 const WEIGHTS = {
-  KNOWLEDGE_GAPS: 0.3,
-  OVERDUE_TASKS: 0.25,
-  CONFIDENCE: 0.2,
-  ROADMAP_PROGRESS: 0.15,
-  ENGAGEMENT: 0.1,
+  OVERDUE_TASKS: 0.35,
+  CONFIDENCE: 0.25,
+  ROADMAP_PROGRESS: 0.2,
+  ENGAGEMENT: 0.2,
 };
 
 @Injectable()
@@ -17,13 +15,11 @@ export class RiskEngineService {
 
   constructor(
     private prisma: PrismaService,
-    private knowledgeGapsService: KnowledgeGapsService,
     private learningAnalytics: LearningAnalyticsService,
   ) {}
 
   async calculateRisk(userId: number) {
-    const [gaps, analytics, tasks, roadmaps] = await Promise.all([
-      this.knowledgeGapsService.list(userId),
+    const [analytics, tasks, roadmaps] = await Promise.all([
       this.learningAnalytics.getAnalytics(userId),
       this.prisma.task.findMany({
         where: { subject: { userId }, status: { not: 'COMPLETED' } },
@@ -35,14 +31,9 @@ export class RiskEngineService {
       }),
     ]);
 
-    const activeGaps = (gaps || []).filter(
-      (g: any) => g.status === 'DETECTED' || g.status === 'IMPROVING',
-    );
-
     const now = new Date();
     const overdueTasks = tasks.filter((t) => t.dueDate < now);
 
-    const gapScore = Math.min(1, activeGaps.length / 10);
     const overdueScore = Math.min(1, overdueTasks.length / 5);
     const confidenceScore =
       analytics?.masteryScore != null ? 1 - analytics.masteryScore : 0.5;
@@ -51,16 +42,13 @@ export class RiskEngineService {
       analytics?.engagementScore != null ? 1 - analytics.engagementScore : 0.5;
 
     const riskScore = Math.round(
-      gapScore * WEIGHTS.KNOWLEDGE_GAPS * 100 +
-        overdueScore * WEIGHTS.OVERDUE_TASKS * 100 +
+      overdueScore * WEIGHTS.OVERDUE_TASKS * 100 +
         confidenceScore * WEIGHTS.CONFIDENCE * 100 +
         roadmapScore * WEIGHTS.ROADMAP_PROGRESS * 100 +
         engagementScore * WEIGHTS.ENGAGEMENT * 100,
     );
 
     const reasons: string[] = [];
-    if (activeGaps.length > 0)
-      reasons.push(`${activeGaps.length} gap(s) activo(s)`);
     if (overdueTasks.length > 0)
       reasons.push(`${overdueTasks.length} tarea(s) vencida(s)`);
     if (confidenceScore > 0.6) reasons.push('confianza baja en las materias');
@@ -73,18 +61,12 @@ export class RiskEngineService {
       riskScore,
       level,
       reasons,
-      gapScore,
       overdueScore,
       confidenceScore,
       roadmapScore,
       engagementScore,
       // Estructura ponderada con datos reales para el desglose del frontend.
       factors: {
-        knowledgeGaps: {
-          score: Math.round(gapScore * 30),
-          max: 30,
-          gapsCount: activeGaps.length,
-        },
         overdueTasks: {
           score: Math.round(overdueScore * 25),
           max: 25,
@@ -116,32 +98,21 @@ export class RiskEngineService {
     });
     if (!subject || subject.userId !== userId) return null;
 
-    const gaps = await this.knowledgeGapsService.listBySubject(
-      userId,
-      subject.nombre,
-    );
-    const activeGaps = (gaps || []).filter(
-      (g: any) => g.status === 'DETECTED' || g.status === 'IMPROVING',
-    );
-
     const now = new Date();
     const overdueTasks = subject.tasks.filter(
       (t) => t.dueDate < now && t.status !== 'COMPLETED',
     );
     const totalTasks = subject.tasks.filter((t) => t.status !== 'COMPLETED');
 
-    const gapScore = Math.min(1, activeGaps.length / 5);
     const overdueScore = Math.min(1, overdueTasks.length / 3);
     const taskRatio =
       totalTasks.length > 0 ? overdueTasks.length / totalTasks.length : 0;
     const taskScore = overdueScore * 0.5 + taskRatio * 0.5;
 
-    const riskScore = Math.round(gapScore * 40 + taskScore * 60);
+    const riskScore = Math.round(taskScore * 100);
     const level = riskScore < 40 ? 'LOW' : riskScore < 70 ? 'MEDIUM' : 'HIGH';
 
     const reasons: string[] = [];
-    if (activeGaps.length > 0)
-      reasons.push(`${activeGaps.length} gap(s) activo(s)`);
     if (overdueTasks.length > 0)
       reasons.push(`${overdueTasks.length} tarea(s) vencida(s)`);
 
@@ -151,7 +122,6 @@ export class RiskEngineService {
       riskScore,
       level,
       reasons,
-      gapScore,
       taskScore,
     };
   }

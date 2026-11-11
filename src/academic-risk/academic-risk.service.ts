@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviderService } from '../ai/ai-provider.service';
-import { LearningGoalsService } from '../ai/learning-goals/learning-goals.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RiskEngineService } from './risk-engine.service';
 import { RiskRecommendationService } from './risk-recommendation.service';
@@ -15,7 +14,6 @@ export class AcademicRiskService {
     private prisma: PrismaService,
     private riskEngine: RiskEngineService,
     private recommendations: RiskRecommendationService,
-    private learningGoals: LearningGoalsService,
     private notifications: NotificationsService,
     private ai: AiProviderService,
   ) {}
@@ -61,12 +59,6 @@ export class AcademicRiskService {
   ) {
     const reasonsText = result.reasons.join(', ');
 
-    const goal = await this.learningGoals.createGoal(
-      userId,
-      `Plan de recuperación - Riesgo ${result.level}`,
-      `Nivel de riesgo: ${result.riskScore}/100. Motivos: ${reasonsText}. Meta generada automáticamente para retomar el ritmo académico.`,
-    );
-
     const studyPlan = await this.generateStudyPlan(userId, reasonsText);
     const examTips = await this.generateExamTips(userId, reasonsText);
 
@@ -77,7 +69,6 @@ export class AcademicRiskService {
       NotificationType.EXAM_ALERT,
       {
         riskScore: result.riskScore,
-        learningGoalId: goal?._id,
         studyPlan,
         examTips,
       },
@@ -183,7 +174,6 @@ export class AcademicRiskService {
       riskScore: number;
       level: string;
       reasons: string[];
-      gapScore: number;
       taskScore: number;
     }> = [];
     for (const subject of subjects) {

@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GamificationService } from '../gamification/gamification.service';
 import { AcademicRiskService } from '../academic-risk/academic-risk.service';
-import { LearningGoalsService } from '../ai/learning-goals/learning-goals.service';
 import { TaskStatus } from '../common/enums';
 
 @Injectable()
@@ -13,7 +12,6 @@ export class DashboardService {
     private prisma: PrismaService,
     private gamification: GamificationService,
     private academicRisk: AcademicRiskService,
-    private learningGoals: LearningGoalsService,
   ) {}
 
   async getSummary(userId: number) {
@@ -25,7 +23,7 @@ export class DashboardService {
       select: { nombre: true, apellido: true },
     });
 
-    const [subjects, tasks, notes, gamification, risk, goals] = await Promise.all([
+    const [subjects, tasks, notes, gamification, risk] = await Promise.all([
       this.prisma.subject.findMany({
         where: { userId },
         include: { schedules: true },
@@ -41,7 +39,6 @@ export class DashboardService {
       }),
       this.gamification.getProgress(userId),
       this.academicRisk.getLatest(userId),
-      this.learningGoals.listGoals(userId),
     ]);
 
     const pendingTasks = tasks.filter(
@@ -98,11 +95,6 @@ export class DashboardService {
       subjectColor: subjects.find((s) => s.id === n.subjectId)?.color ?? null,
     }));
 
-    const allGoals = (goals ?? []).filter((g): g is NonNullable<typeof g> => g != null);
-    const activeGoals = allGoals
-      .filter((g) => g.status === 'active')
-      .slice(0, 3);
-
     return {
       user,
       stats: {
@@ -128,7 +120,6 @@ export class DashboardService {
             createdAt: risk.createdAt,
           }
         : null,
-      activeGoals,
       upcomingClasses,
       upcomingTasks,
       recentNotes,

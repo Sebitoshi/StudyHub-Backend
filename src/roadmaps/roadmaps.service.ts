@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviderService } from '../ai/ai-provider.service';
-import { LearningGoalsService } from '../ai/learning-goals/learning-goals.service';
 import { GenerateRoadmapDto } from './dto/generate-roadmap.dto';
 import { RoadmapTemplate } from '@prisma/client';
 
@@ -18,7 +17,6 @@ export class RoadmapsService {
   constructor(
     private prisma: PrismaService,
     private ai: AiProviderService,
-    private learningGoalsService: LearningGoalsService,
     @Inject('MONGO_CLIENT') private mongoClient: any,
   ) {}
 
@@ -163,14 +161,6 @@ export class RoadmapsService {
       },
       include: { steps: { orderBy: { order: 'asc' } } },
     });
-
-    for (const step of roadmap.steps) {
-      await this.learningGoalsService.createGoal(
-        userId,
-        step.title,
-        step.description || `Aprender ${step.skill} como parte de "${topic}"`,
-      );
-    }
 
     return roadmap;
   }
@@ -326,16 +316,6 @@ Asegúrate de cubrir de forma estructurada y progresiva las habilidades necesari
       },
       include: { steps: true },
     });
-
-    // Generate Learning Goals in MongoDB for each step
-    for (const step of roadmap.steps) {
-      await this.learningGoalsService.createGoal(
-        userId,
-        step.title,
-        step.description ||
-          `Aprender ${step.skill} como parte del roadmap de ${targetRole}`,
-      );
-    }
 
     return roadmap;
   }
