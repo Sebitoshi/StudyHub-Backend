@@ -1558,7 +1558,7 @@ APP_PUBLIC_URL=https://api.tudominio.com
 BILLING_BACK_URL=https://app.tudominio.com/premium/gracias
 # Opcionales
 BILLING_WEBHOOK_URL=https://api.tudominio.com/billing/webhook
-AI_PREMIUM_PRICE_COP=29900
+AI_PREMIUM_PRICE_COP=5000
 AI_FREE_DAILY_CREDITS=25
 AI_PREMIUM_DAILY_CREDITS=-1
 BILLING_TIMEZONE=America/Bogota

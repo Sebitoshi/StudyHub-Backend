@@ -66,7 +66,7 @@ export function getPremiumPlan(): BillingPlanDefinition {
     name: 'Premium',
     description:
       'Chat sin límite, modos max/maxpro y análisis de imágenes y documentos ilimitados.',
-    priceCop: readIntEnv('AI_PREMIUM_PRICE_COP', 29900),
+    priceCop: readIntEnv('AI_PREMIUM_PRICE_COP', 5000),
     currency: BILLING_CURRENCY,
     chatDailyCredits: UNLIMITED_CREDITS,
     premiumDailyUses: UNLIMITED_CREDITS,
